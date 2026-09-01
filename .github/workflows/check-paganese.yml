@@ -34,7 +34,9 @@ jobs:
           echo ""
           echo "Cerco PDF relativi a variazioni gare..."
 
-          grep -i "variazioni.*\.pdf" links.txt > variazioni.txt || true
+          grep -i "variazioni.*\.pdf" links.txt \
+            | sed -E 's/^[[:space:]]*[0-9]+\.[[:space:]]*//' \
+            > variazioni.txt || true
 
           echo ""
           echo "PDF trovati:"
@@ -48,6 +50,10 @@ jobs:
           FOUND=0
 
           while IFS= read -r url; do
+
+            if [ -z "$url" ]; then
+              continue
+            fi
 
             echo ""
             echo "Analizzo:"
