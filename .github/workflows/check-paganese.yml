@@ -11,27 +11,27 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Controlla i comunicati Serie D
+      - name: Controlla nuovi comunicati Serie D
         run: |
           echo "======================================"
           echo "CONTROLLO AUTOMATICO PAGANESE"
-          echo "Data controllo:"
-          date
           echo "======================================"
+          date
 
           echo ""
-          echo "Scarico pagina comunicati ufficiali Serie D..."
+          echo "Scarico pagina comunicati Serie D..."
 
-          curl -L -s https://lnd.it/seried/comunicati/ > comunicati.html
-
-          echo ""
-          echo "Cerco riferimenti alla Paganese..."
-
-          if grep -i -q "Paganese" comunicati.html; then
-            echo "ATTENZIONE: trovato riferimento alla Paganese!"
-          else
-            echo "Nessun riferimento diretto alla Paganese nella pagina."
-          fi
+          curl -L -s \
+            "https://lnd.it/seried/comunicati/?competition=1" \
+            -o comunicati.html
 
           echo ""
-          echo "Controllo completato."
+          echo "Cerco comunicati relativi a variazioni gare..."
+          echo ""
+
+          grep -i -B 3 -A 5 "Variazioni al programma gare" comunicati.html || true
+
+          echo ""
+          echo "======================================"
+          echo "CONTROLLO COMPLETATO"
+          echo "======================================"
