@@ -23,7 +23,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq lynx poppler-utils
 
-      - name: Analizza variazioni delle partite di campionato
+      - name: Analizza variazioni delle partite
         run: |
           echo "======================================"
           echo "CONTROLLO AUTOMATICO PAGANESE"
@@ -48,11 +48,6 @@ jobs:
           echo "PDF trovati:"
           cat variazioni.txt || true
 
-          echo ""
-          echo "======================================"
-          echo "ANALISI PARTITE E VARIAZIONI"
-          echo "======================================"
-
           python3 <<'PY'
           import re
           import subprocess
@@ -60,10 +55,6 @@ jobs:
           from pathlib import Path
           from urllib.request import urlretrieve
 
-
-          # ======================================
-          # FUNZIONI
-          # ======================================
 
           def normalizza(testo):
               testo = unicodedata.normalize("NFD", testo)
@@ -82,6 +73,7 @@ jobs:
 
 
           def formatta_data(data_ics):
+
               if not data_ics:
                   return "DATA NON TROVATA"
 
@@ -134,6 +126,11 @@ jobs:
 
           partite = []
 
+
+          # ======================================
+          # PARTITE DAL CALENDARIO CAMPIONATO
+          # ======================================
+
           for evento in eventi:
 
               summary_match = re.search(
@@ -152,6 +149,7 @@ jobs:
                   continue
 
               summary = summary_match.group(1).strip()
+
               data_ics = (
                   dtstart_match.group(1).strip()
                   if dtstart_match
@@ -167,10 +165,12 @@ jobs:
               trasferta_norm = normalizza(trasferta)
 
               if casa_norm == "PAGANESE":
+
                   avversario = trasferta_norm
                   ruolo = "CASA"
 
               elif trasferta_norm == "PAGANESE":
+
                   avversario = casa_norm
                   ruolo = "TRASFERTA"
 
@@ -181,18 +181,35 @@ jobs:
                   "summary": summary,
                   "avversario": avversario,
                   "ruolo": ruolo,
-                  "data": formatta_data(data_ics)
+                  "data": formatta_data(data_ics),
+                  "tipo": "CAMPIONATO"
               })
+
+
+          # ======================================
+          # PARTITA TEST: COPPA ITALIA
+          # ======================================
+
+          partite.append({
+              "summary": "Paganese - Palmese",
+              "avversario": "PALMESE",
+              "ruolo": "CASA",
+              "data": "30/08/2026",
+              "tipo": "TEST COPPA ITALIA"
+          })
 
 
           print("")
           print("PARTITE CARICATE:", len(partite))
+          print("")
 
           for partita in partite:
+
               print(
                   f"- {partita['data']} | "
                   f"{partita['summary']} | "
-                  f"{partita['ruolo']}"
+                  f"{partita['ruolo']} | "
+                  f"{partita['tipo']}"
               )
 
 
@@ -273,7 +290,7 @@ jobs:
 
 
               # ======================================
-              # CERCA PAGANESE + AVVERSARIO
+              # CERCA PARTITE
               # ======================================
 
               for indice, riga in enumerate(righe):
@@ -295,12 +312,12 @@ jobs:
                       trovato_in_pdf = True
 
 
-                      # Evita doppioni
                       chiave = (
                           url,
                           partita["summary"],
                           indice
                       )
+
 
                       if any(
                           r["chiave"] == chiave
@@ -317,38 +334,40 @@ jobs:
                       })
 
 
-                      # ==================================
-                      # OUTPUT DETTAGLIATO
-                      # ==================================
+                      print("")
+                      print("🚨🚨🚨 PARTITA TROVATA 🚨🚨🚨")
+                      print("")
 
-                      print("")
-                      print("🚨🚨🚨 POSSIBILE VARIAZIONE TROVATA 🚨🚨🚨")
-                      print("")
                       print(
-                          "PARTITA CALENDARIO: "
+                          "PARTITA: "
                           + partita["summary"]
                       )
+
                       print(
-                          "DATA ATTUALE: "
+                          "DATA: "
                           + partita["data"]
                       )
+
                       print(
-                          "PAGANESE: "
+                          "TIPO: "
+                          + partita["tipo"]
+                      )
+
+                      print(
+                          "RUOLO PAGANESE: "
                           + partita["ruolo"]
                       )
-                      print(
-                          "AVVERSARIO: "
-                          + partita["avversario"]
-                      )
+
 
                       print("")
                       print("======================================")
                       print("CONTESTO COMPLETO DAL COMUNICATO")
                       print("======================================")
 
-                      # Stampiamo MOLTO contesto
+
                       inizio = max(0, indice - 20)
                       fine = min(len(righe), indice + 25)
+
 
                       for numero_riga in range(inizio, fine):
 
@@ -364,6 +383,7 @@ jobs:
                               f"{righe[numero_riga]}"
                           )
 
+
                       print("======================================")
                       print("FINE CONTESTO")
                       print("======================================")
@@ -373,7 +393,7 @@ jobs:
 
                   print("")
                   print(
-                      "Nessuna partita del calendario "
+                      "Nessuna partita monitorata "
                       "trovata in questo comunicato."
                   )
 
@@ -390,7 +410,7 @@ jobs:
           if risultati:
 
               print("")
-              print("🚨 POSSIBILI VARIAZIONI TROVATE:")
+              print("🚨 PARTITE TROVATE NEI COMUNICATI:")
               print("")
 
               for risultato in risultati:
@@ -400,7 +420,7 @@ jobs:
                   print(
                       f"- {partita['data']} | "
                       f"{partita['summary']} | "
-                      f"{partita['ruolo']}"
+                      f"{partita['tipo']}"
                   )
 
                   print(
@@ -411,8 +431,8 @@ jobs:
 
               print("")
               print(
-                  "✅ Nessuna variazione relativa "
-                  "alle partite del calendario."
+                  "✅ Nessuna partita monitorata "
+                  "trovata nei comunicati."
               )
 
 
