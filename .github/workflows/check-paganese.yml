@@ -11,7 +11,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Controlla nuovi comunicati Serie D
+      - name: Installa strumenti
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lynx
+
+      - name: Cerca comunicati con variazioni
         run: |
           echo "======================================"
           echo "CONTROLLO AUTOMATICO PAGANESE"
@@ -19,17 +24,12 @@ jobs:
           date
 
           echo ""
-          echo "Scarico pagina comunicati Serie D..."
-
-          curl -L -s \
-            "https://lnd.it/seried/comunicati/?competition=1" \
-            -o comunicati.html
-
-          echo ""
-          echo "Cerco comunicati relativi a variazioni gare..."
+          echo "Cerco comunicati LND contenenti VARIAZIONI..."
           echo ""
 
-          grep -i -B 3 -A 5 "Variazioni al programma gare" comunicati.html || true
+          lynx -dump \
+            "https://lnd.it/seried/comunicati/" \
+            | grep -i "variazioni" || true
 
           echo ""
           echo "======================================"
