@@ -1,0 +1,330 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Paganese 1926//Calendario 2026-27//IT
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:💙 Paganese 2026/27
+X-WR-TIMEZONE:Europe/Rome
+BEGIN:VEVENT
+UID:paganese-2026-27-1@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20260906T150000
+DTEND;TZID=Europe/Rome:20260906T170000
+SUMMARY:Paganese - Unipomezia
+DESCRIPTION:Serie D Girone G 2026/27\nAndata – 1ª giornata\nCasa: Paganese\nTrasferta: Unipomezia\nOrario da verificare in caso di variazioni ufficiali.
+LOCATION:Stadio Marcello Torre, Pagani
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-2@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20260913T150000
+DTEND;TZID=Europe/Rome:20260913T170000
+SUMMARY:Sassari Latte Dolce - Paganese
+DESCRIPTION:Serie D Girone G 2026/27\nAndata – 2ª giornata\nCasa: Sassari Latte Dolce\nTrasferta: Paganese\nOrario da verificare in caso di variazioni ufficiali.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-3@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20260916T150000
+DTEND;TZID=Europe/Rome:20260916T170000
+SUMMARY:Paganese - Afragolese
+DESCRIPTION:Serie D Girone G 2026/27\nAndata – 3ª giornata\nCasa: Paganese\nTrasferta: Afragolese\nOrario da verificare in caso di variazioni ufficiali.
+LOCATION:Stadio Marcello Torre, Pagani
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-4@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20260920T150000
+DTEND;TZID=Europe/Rome:20260920T170000
+SUMMARY:Trastevere - Paganese
+DESCRIPTION:Serie D Girone G 2026/27\nAndata – 4ª giornata\nCasa: Trastevere\nTrasferta: Paganese\nOrario da verificare in caso di variazioni ufficiali.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-5@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20260927T150000
+DTEND;TZID=Europe/Rome:20260927T170000
+SUMMARY:Paganese - Gelbison
+DESCRIPTION:Serie D Girone G 2026/27\nAndata – 5ª giornata\nCasa: Paganese\nTrasferta: Gelbison\nOrario da verificare in caso di variazioni ufficiali.
+LOCATION:Stadio Marcello Torre, Pagani
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-6@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20261004T150000
+DTEND;TZID=Europe/Rome:20261004T170000
+SUMMARY:Sarnese 1926 - Paganese
+DESCRIPTION:Serie D Girone G 2026/27\nAndata – 6ª giornata\nCasa: Sarnese 1926\nTrasferta: Paganese\nOrario da verificare in caso di variazioni ufficiali.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-7@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20261011T150000
+DTEND;TZID=Europe/Rome:20261011T170000
+SUMMARY:Paganese - Budoni
+DESCRIPTION:Serie D Girone G 2026/27\nAndata – 7ª giornata\nCasa: Paganese\nTrasferta: Budoni\nOrario da verificare in caso di variazioni ufficiali.
+LOCATION:Stadio Marcello Torre, Pagani
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-8@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20261018T150000
+DTEND;TZID=Europe/Rome:20261018T170000
+SUMMARY:U. S. Venafro - Paganese
+DESCRIPTION:Serie D Girone G 2026/27\nAndata – 8ª giornata\nCasa: U. S. Venafro\nTrasferta: Paganese\nOrario da verificare in caso di variazioni ufficiali.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-9@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20261025T143000
+DTEND;TZID=Europe/Rome:20261025T163000
+SUMMARY:Città di Anagni - Paganese
+DESCRIPTION:Serie D Girone G 2026/27\nAndata – 9ª giornata\nCasa: Città di Anagni\nTrasferta: Paganese\nOrario da verificare in caso di variazioni ufficiali.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-10@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20261101T143000
+DTEND;TZID=Europe/Rome:20261101T163000
+SUMMARY:Paganese - Ossese
+DESCRIPTION:Serie D Girone G 2026/27\nAndata – 10ª giornata\nCasa: Paganese\nTrasferta: Ossese\nOrario da verificare in caso di variazioni ufficiali.
+LOCATION:Stadio Marcello Torre, Pagani
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-11@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20261108T143000
+DTEND;TZID=Europe/Rome:20261108T163000
+SUMMARY:Sarrabus Ogliastra - Paganese
+DESCRIPTION:Serie D Girone G 2026/27\nAndata – 11ª giornata\nCasa: Sarrabus Ogliastra\nTrasferta: Paganese\nOrario da verificare in caso di variazioni ufficiali.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-12@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20261115T143000
+DTEND;TZID=Europe/Rome:20261115T163000
+SUMMARY:Paganese - Atletico Lodigiani
+DESCRIPTION:Serie D Girone G 2026/27\nAndata – 12ª giornata\nCasa: Paganese\nTrasferta: Atletico Lodigiani\nOrario da verificare in caso di variazioni ufficiali.
+LOCATION:Stadio Marcello Torre, Pagani
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-13@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20261122T143000
+DTEND;TZID=Europe/Rome:20261122T163000
+SUMMARY:Anzio - Paganese
+DESCRIPTION:Serie D Girone G 2026/27\nAndata – 13ª giornata\nCasa: Anzio\nTrasferta: Paganese\nOrario da verificare in caso di variazioni ufficiali.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-14@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20261129T143000
+DTEND;TZID=Europe/Rome:20261129T163000
+SUMMARY:Paganese - Aranova
+DESCRIPTION:Serie D Girone G 2026/27\nAndata – 14ª giornata\nCasa: Paganese\nTrasferta: Aranova\nOrario da verificare in caso di variazioni ufficiali.
+LOCATION:Stadio Marcello Torre, Pagani
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-15@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20261206T143000
+DTEND;TZID=Europe/Rome:20261206T163000
+SUMMARY:Monastir 1983 - Paganese
+DESCRIPTION:Serie D Girone G 2026/27\nAndata – 15ª giornata\nCasa: Monastir 1983\nTrasferta: Paganese\nOrario da verificare in caso di variazioni ufficiali.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-16@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20261213T143000
+DTEND;TZID=Europe/Rome:20261213T163000
+SUMMARY:Paganese - Viterbese
+DESCRIPTION:Serie D Girone G 2026/27\nAndata – 16ª giornata\nCasa: Paganese\nTrasferta: Viterbese\nOrario da verificare in caso di variazioni ufficiali.
+LOCATION:Stadio Marcello Torre, Pagani
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-17@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20261220T143000
+DTEND;TZID=Europe/Rome:20261220T163000
+SUMMARY:Albalonga - Paganese
+DESCRIPTION:Serie D Girone G 2026/27\nAndata – 17ª giornata\nCasa: Albalonga\nTrasferta: Paganese\nOrario da verificare in caso di variazioni ufficiali.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-18@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20270106T143000
+DTEND;TZID=Europe/Rome:20270106T163000
+SUMMARY:UniPomezia - Paganese
+DESCRIPTION:Serie D Girone G 2026/27\nRitorno – 1ª giornata\nCasa: UniPomezia\nTrasferta: Paganese\nOrario da verificare in caso di variazioni ufficiali.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-19@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20270110T143000
+DTEND;TZID=Europe/Rome:20270110T163000
+SUMMARY:Paganese - Sassari Latte Dolce
+DESCRIPTION:Serie D Girone G 2026/27\nRitorno – 2ª giornata\nCasa: Paganese\nTrasferta: Sassari Latte Dolce\nOrario da verificare in caso di variazioni ufficiali.
+LOCATION:Stadio Marcello Torre, Pagani
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-20@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20270117T143000
+DTEND;TZID=Europe/Rome:20270117T163000
+SUMMARY:Afragolese - Paganese
+DESCRIPTION:Serie D Girone G 2026/27\nRitorno – 3ª giornata\nCasa: Afragolese\nTrasferta: Paganese\nOrario da verificare in caso di variazioni ufficiali.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-21@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20270124T143000
+DTEND;TZID=Europe/Rome:20270124T163000
+SUMMARY:Paganese - Trastevere
+DESCRIPTION:Serie D Girone G 2026/27\nRitorno – 4ª giornata\nCasa: Paganese\nTrasferta: Trastevere\nOrario da verificare in caso di variazioni ufficiali.
+LOCATION:Stadio Marcello Torre, Pagani
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-22@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20270131T143000
+DTEND;TZID=Europe/Rome:20270131T163000
+SUMMARY:Gelbison - Paganese
+DESCRIPTION:Serie D Girone G 2026/27\nRitorno – 5ª giornata\nCasa: Gelbison\nTrasferta: Paganese\nOrario da verificare in caso di variazioni ufficiali.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-23@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20270207T143000
+DTEND;TZID=Europe/Rome:20270207T163000
+SUMMARY:Paganese - Sarnese 1926
+DESCRIPTION:Serie D Girone G 2026/27\nRitorno – 6ª giornata\nCasa: Paganese\nTrasferta: Sarnese 1926\nOrario da verificare in caso di variazioni ufficiali.
+LOCATION:Stadio Marcello Torre, Pagani
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-24@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20270214T143000
+DTEND;TZID=Europe/Rome:20270214T163000
+SUMMARY:Budoni - Paganese
+DESCRIPTION:Serie D Girone G 2026/27\nRitorno – 7ª giornata\nCasa: Budoni\nTrasferta: Paganese\nOrario da verificare in caso di variazioni ufficiali.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-25@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20270221T143000
+DTEND;TZID=Europe/Rome:20270221T163000
+SUMMARY:U. S. Venafro - Paganese
+DESCRIPTION:Serie D Girone G 2026/27\nRitorno – 8ª giornata\nCasa: U. S. Venafro\nTrasferta: Paganese\nOrario da verificare in caso di variazioni ufficiali.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-26@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20270228T143000
+DTEND;TZID=Europe/Rome:20270228T163000
+SUMMARY:Paganese - Città di Anagni
+DESCRIPTION:Serie D Girone G 2026/27\nRitorno – 9ª giornata\nCasa: Paganese\nTrasferta: Città di Anagni\nOrario da verificare in caso di variazioni ufficiali.
+LOCATION:Stadio Marcello Torre, Pagani
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-27@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20270314T143000
+DTEND;TZID=Europe/Rome:20270314T163000
+SUMMARY:Ossese - Paganese
+DESCRIPTION:Serie D Girone G 2026/27\nRitorno – 10ª giornata\nCasa: Ossese\nTrasferta: Paganese\nOrario da verificare in caso di variazioni ufficiali.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-28@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20270321T143000
+DTEND;TZID=Europe/Rome:20270321T163000
+SUMMARY:Paganese - Sarrabus Ogliastra
+DESCRIPTION:Serie D Girone G 2026/27\nRitorno – 11ª giornata\nCasa: Paganese\nTrasferta: Sarrabus Ogliastra\nOrario da verificare in caso di variazioni ufficiali.
+LOCATION:Stadio Marcello Torre, Pagani
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-29@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20270325T143000
+DTEND;TZID=Europe/Rome:20270325T163000
+SUMMARY:Atletico Lodigiani - Paganese
+DESCRIPTION:Serie D Girone G 2026/27\nRitorno – 12ª giornata\nCasa: Atletico Lodigiani\nTrasferta: Paganese\nOrario da verificare in caso di variazioni ufficiali.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-30@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20270404T150000
+DTEND;TZID=Europe/Rome:20270404T170000
+SUMMARY:Paganese - Anzio
+DESCRIPTION:Serie D Girone G 2026/27\nRitorno – 13ª giornata\nCasa: Paganese\nTrasferta: Anzio\nOrario da verificare in caso di variazioni ufficiali.
+LOCATION:Stadio Marcello Torre, Pagani
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-31@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20270411T150000
+DTEND;TZID=Europe/Rome:20270411T170000
+SUMMARY:Aranova - Paganese
+DESCRIPTION:Serie D Girone G 2026/27\nRitorno – 14ª giornata\nCasa: Aranova\nTrasferta: Paganese\nOrario da verificare in caso di variazioni ufficiali.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-32@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20270418T150000
+DTEND;TZID=Europe/Rome:20270418T170000
+SUMMARY:Paganese - Monastir 1983
+DESCRIPTION:Serie D Girone G 2026/27\nRitorno – 15ª giornata\nCasa: Paganese\nTrasferta: Monastir 1983\nOrario da verificare in caso di variazioni ufficiali.
+LOCATION:Stadio Marcello Torre, Pagani
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-33@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20270425T150000
+DTEND;TZID=Europe/Rome:20270425T170000
+SUMMARY:Viterbese - Paganese
+DESCRIPTION:Serie D Girone G 2026/27\nRitorno – 16ª giornata\nCasa: Viterbese\nTrasferta: Paganese\nOrario da verificare in caso di variazioni ufficiali.
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:paganese-2026-27-34@calendar
+DTSTAMP:20260901T122423
+DTSTART;TZID=Europe/Rome:20270502T150000
+DTEND;TZID=Europe/Rome:20270502T170000
+SUMMARY:Paganese - Albalonga
+DESCRIPTION:Serie D Girone G 2026/27\nRitorno – 17ª giornata\nCasa: Paganese\nTrasferta: Albalonga\nOrario da verificare in caso di variazioni ufficiali.
+LOCATION:Stadio Marcello Torre, Pagani
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR
