@@ -11,12 +11,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Installa strumenti
         run: |
-          sudo apt-get update
-          sudo apt-get install -y lynx
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lynx poppler-utils
 
-      - name: Cerca comunicati con variazioni
+      - name: Cerca variazioni Paganese nei comunicati
         run: |
           echo "======================================"
           echo "CONTROLLO AUTOMATICO PAGANESE"
@@ -24,14 +25,63 @@ jobs:
           date
 
           echo ""
-          echo "Cerco comunicati LND contenenti VARIAZIONI..."
-          echo ""
+          echo "Scarico elenco comunicati Serie D..."
 
-          lynx -dump \
+          lynx -dump -listonly \
             "https://lnd.it/seried/comunicati/" \
-            | grep -i "variazioni" || true
+            > links.txt
+
+          echo ""
+          echo "Cerco PDF relativi a variazioni gare..."
+
+          grep -i "variazioni.*\.pdf" links.txt > variazioni.txt || true
+
+          echo ""
+          echo "PDF trovati:"
+          cat variazioni.txt || true
 
           echo ""
           echo "======================================"
-          echo "CONTROLLO COMPLETATO"
+          echo "ANALISI DEI PDF"
+          echo "======================================"
+
+          FOUND=0
+
+          while IFS= read -r url; do
+
+            echo ""
+            echo "Analizzo:"
+            echo "$url"
+
+            curl -L -s "$url" -o comunicato.pdf
+
+            pdftotext -layout comunicato.pdf comunicato.txt
+
+            if grep -i -q "PAGANESE" comunicato.txt; then
+
+              echo ""
+              echo "🚨🚨🚨 TROVATA PAGANESE 🚨🚨🚨"
+              echo ""
+
+              grep -i -B 8 -A 12 "PAGANESE" comunicato.txt || true
+
+              FOUND=1
+
+            else
+
+              echo "Nessun riferimento alla Paganese."
+
+            fi
+
+          done < variazioni.txt
+
+          echo ""
+          echo "======================================"
+
+          if [ "$FOUND" -eq 1 ]; then
+            echo "RISULTATO: trovate variazioni riguardanti la Paganese!"
+          else
+            echo "RISULTATO: nessuna variazione Paganese trovata."
+          fi
+
           echo "======================================"
