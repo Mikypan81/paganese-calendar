@@ -59,7 +59,6 @@ jobs:
           import unicodedata
           from pathlib import Path
           from urllib.request import urlretrieve
-          from datetime import datetime
 
 
           # ======================================
@@ -86,30 +85,29 @@ jobs:
               if not data_ics:
                   return "DATA NON TROVATA"
 
-              data_ics = data_ics.strip()
-
               match = re.match(
                   r"(\d{4})(\d{2})(\d{2})",
-                  data_ics
+                  data_ics.strip()
               )
 
               if not match:
                   return data_ics
 
-              anno = match.group(1)
-              mese = match.group(2)
-              giorno = match.group(3)
-
-              return f"{giorno}/{mese}/{anno}"
+              return (
+                  f"{match.group(3)}/"
+                  f"{match.group(2)}/"
+                  f"{match.group(1)}"
+              )
 
 
           # ======================================
-          # LEGGE IL FILE ICS
+          # LETTURA CALENDARIO ICS
           # ======================================
 
           print("")
+          print("======================================")
           print("LETTURA CALENDARIO PAGANESE")
-          print("")
+          print("======================================")
 
           ics_path = Path("paganese.ics")
 
@@ -122,7 +120,6 @@ jobs:
               errors="ignore"
           )
 
-          # Gestione eventuali righe ICS spezzate
           contenuto = re.sub(
               r"\r?\n[ \t]",
               "",
@@ -155,49 +152,41 @@ jobs:
                   continue
 
               summary = summary_match.group(1).strip()
-
-              data_ics = ""
-
-              if dtstart_match:
-                  data_ics = dtstart_match.group(1).strip()
+              data_ics = (
+                  dtstart_match.group(1).strip()
+                  if dtstart_match
+                  else ""
+              )
 
               if " - " not in summary:
                   continue
 
-              casa, trasferta = summary.split(
-                  " - ",
-                  1
-              )
+              casa, trasferta = summary.split(" - ", 1)
 
               casa_norm = normalizza(casa)
               trasferta_norm = normalizza(trasferta)
 
               if casa_norm == "PAGANESE":
-
                   avversario = trasferta_norm
                   ruolo = "CASA"
 
               elif trasferta_norm == "PAGANESE":
-
                   avversario = casa_norm
                   ruolo = "TRASFERTA"
 
               else:
                   continue
 
-              partita = {
+              partite.append({
                   "summary": summary,
                   "avversario": avversario,
                   "ruolo": ruolo,
-                  "data_ics": data_ics,
                   "data": formatta_data(data_ics)
-              }
-
-              partite.append(partita)
+              })
 
 
-          print("PARTITE CARICATE:", len(partite))
           print("")
+          print("PARTITE CARICATE:", len(partite))
 
           for partita in partite:
               print(
@@ -208,25 +197,19 @@ jobs:
 
 
           # ======================================
-          # LEGGE GLI URL DEI COMUNICATI
+          # URL COMUNICATI
           # ======================================
 
-          urls = []
-
           variazioni_path = Path("variazioni.txt")
+
+          urls = []
 
           if variazioni_path.exists():
 
               urls = [
-
                   riga.strip()
-
-                  for riga in
-                  variazioni_path.read_text().splitlines()
-
-                  if riga.strip()
-                  and riga.strip().startswith("http")
-
+                  for riga in variazioni_path.read_text().splitlines()
+                  if riga.strip().startswith("http")
               ]
 
 
@@ -243,26 +226,21 @@ jobs:
           # ANALISI PDF
           # ======================================
 
-          for numero, url in enumerate(urls, 1):
+          for numero_pdf, url in enumerate(urls, 1):
 
               print("")
-              print("")
               print("######################################")
-              print(f"ANALIZZO COMUNICATO {numero}")
+              print(f"ANALIZZO COMUNICATO {numero_pdf}")
               print("######################################")
               print(url)
 
-              pdf = f"comunicato_{numero}.pdf"
-              txt = f"comunicato_{numero}.txt"
+              pdf = f"comunicato_{numero_pdf}.pdf"
+              txt = f"comunicato_{numero_pdf}.txt"
 
 
               try:
 
-                  urlretrieve(
-                      url,
-                      pdf
-                  )
-
+                  urlretrieve(url, pdf)
 
                   subprocess.run(
                       [
@@ -275,12 +253,10 @@ jobs:
                       capture_output=True
                   )
 
-
                   testo = Path(txt).read_text(
                       encoding="utf-8",
                       errors="ignore"
                   )
-
 
               except Exception as errore:
 
@@ -297,13 +273,12 @@ jobs:
 
 
               # ======================================
-              # CERCA LE PARTITE
+              # CERCA PAGANESE + AVVERSARIO
               # ======================================
 
               for indice, riga in enumerate(righe):
 
                   riga_norm = normalizza(riga)
-
 
                   if "PAGANESE" not in riga_norm:
                       continue
@@ -313,7 +288,6 @@ jobs:
 
                       avversario = partita["avversario"]
 
-
                       if avversario not in riga_norm:
                           continue
 
@@ -321,13 +295,12 @@ jobs:
                       trovato_in_pdf = True
 
 
-                      # Evita duplicati identici
+                      # Evita doppioni
                       chiave = (
-                          numero,
+                          url,
                           partita["summary"],
                           indice
                       )
-
 
                       if any(
                           r["chiave"] == chiave
@@ -336,97 +309,64 @@ jobs:
                           continue
 
 
-                      risultato = {
-
+                      risultati.append({
                           "chiave": chiave,
                           "partita": partita,
                           "url": url,
-                          "indice": indice,
-                          "righe": righe
-
-                      }
+                          "indice": indice
+                      })
 
 
-                      risultati.append(risultato)
-
-
-                      print("")
-                      print("🚨🚨🚨 PARTITA TROVATA 🚨🚨🚨")
-                      print("")
-                      print(
-                          "PARTITA CALENDARIO:"
-                      )
-                      print(
-                          partita["summary"]
-                      )
-                      print("")
-                      print(
-                          "DATA ATTUALE CALENDARIO:"
-                      )
-                      print(
-                          partita["data"]
-                      )
-                      print("")
-                      print(
-                          "PAGANESE GIOCA:"
-                      )
-                      print(
-                          partita["ruolo"]
-                      )
-                      print("")
-                      print(
-                          "AVVERSARIO:"
-                      )
-                      print(
-                          partita["avversario"]
-                      )
-                      print("")
-                      print(
-                          "RIGA TROVATA NEL PDF:"
-                      )
-                      print(
-                          riga.strip()
-                      )
-
-
-                      # ======================================
-                      # CONTESTO AMPIO
-                      # ======================================
+                      # ==================================
+                      # OUTPUT DETTAGLIATO
+                      # ==================================
 
                       print("")
+                      print("🚨🚨🚨 POSSIBILE VARIAZIONE TROVATA 🚨🚨🚨")
+                      print("")
                       print(
-                          "---------- CONTESTO PDF ----------"
+                          "PARTITA CALENDARIO: "
+                          + partita["summary"]
+                      )
+                      print(
+                          "DATA ATTUALE: "
+                          + partita["data"]
+                      )
+                      print(
+                          "PAGANESE: "
+                          + partita["ruolo"]
+                      )
+                      print(
+                          "AVVERSARIO: "
+                          + partita["avversario"]
                       )
 
-                      inizio = max(
-                          0,
-                          indice - 12
-                      )
+                      print("")
+                      print("======================================")
+                      print("CONTESTO COMPLETO DAL COMUNICATO")
+                      print("======================================")
 
-                      fine = min(
-                          len(righe),
-                          indice + 15
-                      )
+                      # Stampiamo MOLTO contesto
+                      inizio = max(0, indice - 20)
+                      fine = min(len(righe), indice + 25)
 
+                      for numero_riga in range(inizio, fine):
 
-                      for numero_riga in range(
-                          inizio,
-                          fine
-                      ):
-
-                          prefisso = ">>> " \
-                              if numero_riga == indice \
-                              else "    "
+                          marcatore = (
+                              ">>>"
+                              if numero_riga == indice
+                              else "   "
+                          )
 
                           print(
-                              f"{prefisso}"
+                              f"{marcatore} "
+                              f"{numero_riga + 1:04d} | "
                               f"{righe[numero_riga]}"
                           )
 
-
-                      print(
-                          "----------------------------------"
-                      )
+                      print("======================================")
+                      print("FINE CONTESTO")
+                      print("======================================")
 
 
               if not trovato_in_pdf:
@@ -443,7 +383,6 @@ jobs:
           # ======================================
 
           print("")
-          print("")
           print("======================================")
           print("RISULTATO FINALE CONTROLLO")
           print("======================================")
@@ -451,11 +390,8 @@ jobs:
           if risultati:
 
               print("")
-              print(
-                  "🚨 TROVATE POSSIBILI VARIAZIONI:"
-              )
+              print("🚨 POSSIBILI VARIAZIONI TROVATE:")
               print("")
-
 
               for risultato in risultati:
 
@@ -471,9 +407,6 @@ jobs:
                       f"  Fonte: {risultato['url']}"
                   )
 
-                  print("")
-
-
           else:
 
               print("")
@@ -483,12 +416,10 @@ jobs:
               )
 
 
-          print("======================================")
           print("")
-          print(
-              "CONTROLLO TERMINATO - "
-              "NESSUNA MODIFICA AL CALENDARIO"
-          )
+          print("======================================")
+          print("CONTROLLO TERMINATO")
+          print("CALENDARIO NON MODIFICATO")
           print("======================================")
 
           PY
