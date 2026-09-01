@@ -6,6 +6,9 @@ on:
   schedule:
     - cron: "0 7 * * *"
 
+permissions:
+  contents: read
+
 jobs:
   controllo:
     runs-on: ubuntu-latest
@@ -20,17 +23,12 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq lynx poppler-utils
 
-      - name: Cerca variazioni delle partite di campionato
+      - name: Analizza variazioni delle partite di campionato
         run: |
           echo "======================================"
           echo "CONTROLLO AUTOMATICO PAGANESE"
           echo "======================================"
           date
-
-          echo ""
-          echo "Leggo le partite presenti nel calendario..."
-
-          grep "^SUMMARY:" paganese.ics || true
 
           echo ""
           echo "Scarico elenco comunicati Serie D..."
@@ -52,7 +50,7 @@ jobs:
 
           echo ""
           echo "======================================"
-          echo "CONTROLLO DELLE PARTITE IN CALENDARIO"
+          echo "ANALISI PARTITE E VARIAZIONI"
           echo "======================================"
 
           python3 <<'PY'
@@ -61,91 +59,210 @@ jobs:
           import unicodedata
           from pathlib import Path
           from urllib.request import urlretrieve
+          from datetime import datetime
+
+
+          # ======================================
+          # FUNZIONI
+          # ======================================
 
           def normalizza(testo):
               testo = unicodedata.normalize("NFD", testo)
+
               testo = "".join(
                   c for c in testo
                   if unicodedata.category(c) != "Mn"
               )
+
               testo = testo.upper()
               testo = testo.replace("’", "'")
               testo = re.sub(r"[^A-Z0-9 ]", " ", testo)
               testo = re.sub(r"\s+", " ", testo).strip()
+
               return testo
 
-          # Legge tutte le partite dal calendario ICS
-          ics = Path("paganese.ics").read_text(
+
+          def formatta_data(data_ics):
+              if not data_ics:
+                  return "DATA NON TROVATA"
+
+              data_ics = data_ics.strip()
+
+              match = re.match(
+                  r"(\d{4})(\d{2})(\d{2})",
+                  data_ics
+              )
+
+              if not match:
+                  return data_ics
+
+              anno = match.group(1)
+              mese = match.group(2)
+              giorno = match.group(3)
+
+              return f"{giorno}/{mese}/{anno}"
+
+
+          # ======================================
+          # LEGGE IL FILE ICS
+          # ======================================
+
+          print("")
+          print("LETTURA CALENDARIO PAGANESE")
+          print("")
+
+          ics_path = Path("paganese.ics")
+
+          if not ics_path.exists():
+              print("ERRORE: paganese.ics non trovato!")
+              raise SystemExit(1)
+
+          contenuto = ics_path.read_text(
               encoding="utf-8",
               errors="ignore"
           )
 
+          # Gestione eventuali righe ICS spezzate
+          contenuto = re.sub(
+              r"\r?\n[ \t]",
+              "",
+              contenuto
+          )
+
+          eventi = re.findall(
+              r"BEGIN:VEVENT(.*?)END:VEVENT",
+              contenuto,
+              re.DOTALL
+          )
+
           partite = []
 
-          for summary in re.findall(
-              r"^SUMMARY:(.+)$",
-              ics,
-              re.MULTILINE
-          ):
-              summary = summary.strip()
+          for evento in eventi:
+
+              summary_match = re.search(
+                  r"^SUMMARY:(.+)$",
+                  evento,
+                  re.MULTILINE
+              )
+
+              dtstart_match = re.search(
+                  r"^DTSTART[^:]*:(.+)$",
+                  evento,
+                  re.MULTILINE
+              )
+
+              if not summary_match:
+                  continue
+
+              summary = summary_match.group(1).strip()
+
+              data_ics = ""
+
+              if dtstart_match:
+                  data_ics = dtstart_match.group(1).strip()
 
               if " - " not in summary:
                   continue
 
-              casa, trasferta = summary.split(" - ", 1)
+              casa, trasferta = summary.split(
+                  " - ",
+                  1
+              )
 
-              if normalizza(casa) == "PAGANESE":
-                  avversario = normalizza(trasferta)
+              casa_norm = normalizza(casa)
+              trasferta_norm = normalizza(trasferta)
 
-              elif normalizza(trasferta) == "PAGANESE":
-                  avversario = normalizza(casa)
+              if casa_norm == "PAGANESE":
+
+                  avversario = trasferta_norm
+                  ruolo = "CASA"
+
+              elif trasferta_norm == "PAGANESE":
+
+                  avversario = casa_norm
+                  ruolo = "TRASFERTA"
 
               else:
                   continue
 
-              partite.append({
+              partita = {
                   "summary": summary,
-                  "avversario": avversario
-              })
+                  "avversario": avversario,
+                  "ruolo": ruolo,
+                  "data_ics": data_ics,
+                  "data": formatta_data(data_ics)
+              }
 
-          print("")
-          print("PARTITE DI CAMPIONATO CARICATE:")
+              partite.append(partita)
+
+
+          print("PARTITE CARICATE:", len(partite))
           print("")
 
           for partita in partite:
-              print("-", partita["summary"])
+              print(
+                  f"- {partita['data']} | "
+                  f"{partita['summary']} | "
+                  f"{partita['ruolo']}"
+              )
 
-          print("")
-          print("Totale partite:", len(partite))
 
-          # Legge gli URL dei comunicati
+          # ======================================
+          # LEGGE GLI URL DEI COMUNICATI
+          # ======================================
+
           urls = []
 
-          if Path("variazioni.txt").exists():
+          variazioni_path = Path("variazioni.txt")
+
+          if variazioni_path.exists():
+
               urls = [
+
                   riga.strip()
-                  for riga in Path("variazioni.txt").read_text().splitlines()
+
+                  for riga in
+                  variazioni_path.read_text().splitlines()
+
                   if riga.strip()
+                  and riga.strip().startswith("http")
+
               ]
 
-          trovate = []
 
           print("")
           print("======================================")
-          print("ANALISI COMUNICATI")
+          print("COMUNICATI DA ANALIZZARE:", len(urls))
           print("======================================")
+
+
+          risultati = []
+
+
+          # ======================================
+          # ANALISI PDF
+          # ======================================
 
           for numero, url in enumerate(urls, 1):
 
               print("")
-              print("Analizzo comunicato", numero)
+              print("")
+              print("######################################")
+              print(f"ANALIZZO COMUNICATO {numero}")
+              print("######################################")
               print(url)
 
               pdf = f"comunicato_{numero}.pdf"
               txt = f"comunicato_{numero}.txt"
 
+
               try:
-                  urlretrieve(url, pdf)
+
+                  urlretrieve(
+                      url,
+                      pdf
+                  )
+
 
                   subprocess.run(
                       [
@@ -158,83 +275,220 @@ jobs:
                       capture_output=True
                   )
 
+
                   testo = Path(txt).read_text(
                       encoding="utf-8",
                       errors="ignore"
                   )
 
+
               except Exception as errore:
-                  print("Errore durante la lettura:", errore)
+
+                  print("")
+                  print("ERRORE DURANTE LA LETTURA:")
+                  print(errore)
+
                   continue
+
 
               righe = testo.splitlines()
 
-              trovato_in_questo_pdf = False
+              trovato_in_pdf = False
+
+
+              # ======================================
+              # CERCA LE PARTITE
+              # ======================================
 
               for indice, riga in enumerate(righe):
 
                   riga_norm = normalizza(riga)
 
+
                   if "PAGANESE" not in riga_norm:
                       continue
+
 
                   for partita in partite:
 
                       avversario = partita["avversario"]
 
-                      if avversario in riga_norm:
 
-                          trovato_in_questo_pdf = True
+                      if avversario not in riga_norm:
+                          continue
 
-                          risultato = {
-                              "partita": partita["summary"],
-                              "url": url,
-                              "indice": indice,
-                              "righe": righe
-                          }
 
-                          trovate.append(risultato)
+                      trovato_in_pdf = True
 
-                          print("")
-                          print("🚨🚨🚨 POSSIBILE VARIAZIONE 🚨🚨🚨")
-                          print("PARTITA:", partita["summary"])
-                          print("FONTE:", url)
-                          print("")
-                          print("CONTESTO:")
 
-                          inizio = max(0, indice - 4)
-                          fine = min(len(righe), indice + 8)
+                      # Evita duplicati identici
+                      chiave = (
+                          numero,
+                          partita["summary"],
+                          indice
+                      )
 
-                          for riga_contesto in righe[inizio:fine]:
-                              print(riga_contesto)
 
-                          print("")
-                          print("--------------------------------------")
+                      if any(
+                          r["chiave"] == chiave
+                          for r in risultati
+                      ):
+                          continue
 
-              if not trovato_in_questo_pdf:
-                  print("Nessuna partita del calendario trovata.")
+
+                      risultato = {
+
+                          "chiave": chiave,
+                          "partita": partita,
+                          "url": url,
+                          "indice": indice,
+                          "righe": righe
+
+                      }
+
+
+                      risultati.append(risultato)
+
+
+                      print("")
+                      print("🚨🚨🚨 PARTITA TROVATA 🚨🚨🚨")
+                      print("")
+                      print(
+                          "PARTITA CALENDARIO:"
+                      )
+                      print(
+                          partita["summary"]
+                      )
+                      print("")
+                      print(
+                          "DATA ATTUALE CALENDARIO:"
+                      )
+                      print(
+                          partita["data"]
+                      )
+                      print("")
+                      print(
+                          "PAGANESE GIOCA:"
+                      )
+                      print(
+                          partita["ruolo"]
+                      )
+                      print("")
+                      print(
+                          "AVVERSARIO:"
+                      )
+                      print(
+                          partita["avversario"]
+                      )
+                      print("")
+                      print(
+                          "RIGA TROVATA NEL PDF:"
+                      )
+                      print(
+                          riga.strip()
+                      )
+
+
+                      # ======================================
+                      # CONTESTO AMPIO
+                      # ======================================
+
+                      print("")
+                      print(
+                          "---------- CONTESTO PDF ----------"
+                      )
+
+                      inizio = max(
+                          0,
+                          indice - 12
+                      )
+
+                      fine = min(
+                          len(righe),
+                          indice + 15
+                      )
+
+
+                      for numero_riga in range(
+                          inizio,
+                          fine
+                      ):
+
+                          prefisso = ">>> " \
+                              if numero_riga == indice \
+                              else "    "
+
+                          print(
+                              f"{prefisso}"
+                              f"{righe[numero_riga]}"
+                          )
+
+
+                      print(
+                          "----------------------------------"
+                      )
+
+
+              if not trovato_in_pdf:
+
+                  print("")
+                  print(
+                      "Nessuna partita del calendario "
+                      "trovata in questo comunicato."
+                  )
+
+
+          # ======================================
+          # RISULTATO FINALE
+          # ======================================
 
           print("")
+          print("")
           print("======================================")
-          print("RISULTATO FINALE")
+          print("RISULTATO FINALE CONTROLLO")
           print("======================================")
 
-          if trovate:
+          if risultati:
 
               print("")
-              print("🚨 TROVATE POSSIBILI VARIAZIONI!")
+              print(
+                  "🚨 TROVATE POSSIBILI VARIAZIONI:"
+              )
               print("")
 
-              for risultato in trovate:
-                  print("-", risultato["partita"])
+
+              for risultato in risultati:
+
+                  partita = risultato["partita"]
+
+                  print(
+                      f"- {partita['data']} | "
+                      f"{partita['summary']} | "
+                      f"{partita['ruolo']}"
+                  )
+
+                  print(
+                      f"  Fonte: {risultato['url']}"
+                  )
+
+                  print("")
+
 
           else:
 
               print("")
-              print("✅ Nessuna variazione relativa alle")
-              print("partite attualmente presenti nel")
-              print("calendario Paganese.")
+              print(
+                  "✅ Nessuna variazione relativa "
+                  "alle partite del calendario."
+              )
 
-          print("")
+
           print("======================================")
+          print("")
+          print(
+              "CONTROLLO TERMINATO - "
+              "NESSUNA MODIFICA AL CALENDARIO"
+          )
+          print("======================================")
+
           PY
