@@ -12,17 +12,25 @@ jobs:
 
     steps:
 
+      - name: Scarica repository
+        uses: actions/checkout@v4
+
       - name: Installa strumenti
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq lynx poppler-utils
 
-      - name: Cerca variazioni Paganese nei comunicati
+      - name: Cerca variazioni delle partite di campionato
         run: |
           echo "======================================"
           echo "CONTROLLO AUTOMATICO PAGANESE"
           echo "======================================"
           date
+
+          echo ""
+          echo "Leggo le partite presenti nel calendario..."
+
+          grep "^SUMMARY:" paganese.ics || true
 
           echo ""
           echo "Scarico elenco comunicati Serie D..."
@@ -44,50 +52,189 @@ jobs:
 
           echo ""
           echo "======================================"
-          echo "ANALISI DEI PDF"
+          echo "CONTROLLO DELLE PARTITE IN CALENDARIO"
           echo "======================================"
 
-          FOUND=0
+          python3 <<'PY'
+          import re
+          import subprocess
+          import unicodedata
+          from pathlib import Path
+          from urllib.request import urlretrieve
 
-          while IFS= read -r url; do
+          def normalizza(testo):
+              testo = unicodedata.normalize("NFD", testo)
+              testo = "".join(
+                  c for c in testo
+                  if unicodedata.category(c) != "Mn"
+              )
+              testo = testo.upper()
+              testo = testo.replace("’", "'")
+              testo = re.sub(r"[^A-Z0-9 ]", " ", testo)
+              testo = re.sub(r"\s+", " ", testo).strip()
+              return testo
 
-            if [ -z "$url" ]; then
-              continue
-            fi
+          # Legge tutte le partite dal calendario ICS
+          ics = Path("paganese.ics").read_text(
+              encoding="utf-8",
+              errors="ignore"
+          )
 
-            echo ""
-            echo "Analizzo:"
-            echo "$url"
+          partite = []
 
-            curl -L -s "$url" -o comunicato.pdf
+          for summary in re.findall(
+              r"^SUMMARY:(.+)$",
+              ics,
+              re.MULTILINE
+          ):
+              summary = summary.strip()
 
-            pdftotext -layout comunicato.pdf comunicato.txt
+              if " - " not in summary:
+                  continue
 
-            if grep -i -q "PAGANESE" comunicato.txt; then
+              casa, trasferta = summary.split(" - ", 1)
 
-              echo ""
-              echo "🚨🚨🚨 TROVATA PAGANESE 🚨🚨🚨"
-              echo ""
+              if normalizza(casa) == "PAGANESE":
+                  avversario = normalizza(trasferta)
 
-              grep -i -B 8 -A 12 "PAGANESE" comunicato.txt || true
+              elif normalizza(trasferta) == "PAGANESE":
+                  avversario = normalizza(casa)
 
-              FOUND=1
+              else:
+                  continue
 
-            else
+              partite.append({
+                  "summary": summary,
+                  "avversario": avversario
+              })
 
-              echo "Nessun riferimento alla Paganese."
+          print("")
+          print("PARTITE DI CAMPIONATO CARICATE:")
+          print("")
 
-            fi
+          for partita in partite:
+              print("-", partita["summary"])
 
-          done < variazioni.txt
+          print("")
+          print("Totale partite:", len(partite))
 
-          echo ""
-          echo "======================================"
+          # Legge gli URL dei comunicati
+          urls = []
 
-          if [ "$FOUND" -eq 1 ]; then
-            echo "RISULTATO: trovate variazioni riguardanti la Paganese!"
-          else
-            echo "RISULTATO: nessuna variazione Paganese trovata."
-          fi
+          if Path("variazioni.txt").exists():
+              urls = [
+                  riga.strip()
+                  for riga in Path("variazioni.txt").read_text().splitlines()
+                  if riga.strip()
+              ]
 
-          echo "======================================"
+          trovate = []
+
+          print("")
+          print("======================================")
+          print("ANALISI COMUNICATI")
+          print("======================================")
+
+          for numero, url in enumerate(urls, 1):
+
+              print("")
+              print("Analizzo comunicato", numero)
+              print(url)
+
+              pdf = f"comunicato_{numero}.pdf"
+              txt = f"comunicato_{numero}.txt"
+
+              try:
+                  urlretrieve(url, pdf)
+
+                  subprocess.run(
+                      [
+                          "pdftotext",
+                          "-layout",
+                          pdf,
+                          txt
+                      ],
+                      check=True,
+                      capture_output=True
+                  )
+
+                  testo = Path(txt).read_text(
+                      encoding="utf-8",
+                      errors="ignore"
+                  )
+
+              except Exception as errore:
+                  print("Errore durante la lettura:", errore)
+                  continue
+
+              righe = testo.splitlines()
+
+              trovato_in_questo_pdf = False
+
+              for indice, riga in enumerate(righe):
+
+                  riga_norm = normalizza(riga)
+
+                  if "PAGANESE" not in riga_norm:
+                      continue
+
+                  for partita in partite:
+
+                      avversario = partita["avversario"]
+
+                      if avversario in riga_norm:
+
+                          trovato_in_questo_pdf = True
+
+                          risultato = {
+                              "partita": partita["summary"],
+                              "url": url,
+                              "indice": indice,
+                              "righe": righe
+                          }
+
+                          trovate.append(risultato)
+
+                          print("")
+                          print("🚨🚨🚨 POSSIBILE VARIAZIONE 🚨🚨🚨")
+                          print("PARTITA:", partita["summary"])
+                          print("FONTE:", url)
+                          print("")
+                          print("CONTESTO:")
+
+                          inizio = max(0, indice - 4)
+                          fine = min(len(righe), indice + 8)
+
+                          for riga_contesto in righe[inizio:fine]:
+                              print(riga_contesto)
+
+                          print("")
+                          print("--------------------------------------")
+
+              if not trovato_in_questo_pdf:
+                  print("Nessuna partita del calendario trovata.")
+
+          print("")
+          print("======================================")
+          print("RISULTATO FINALE")
+          print("======================================")
+
+          if trovate:
+
+              print("")
+              print("🚨 TROVATE POSSIBILI VARIAZIONI!")
+              print("")
+
+              for risultato in trovate:
+                  print("-", risultato["partita"])
+
+          else:
+
+              print("")
+              print("✅ Nessuna variazione relativa alle")
+              print("partite attualmente presenti nel")
+              print("calendario Paganese.")
+
+          print("")
+          print("======================================")
+          PY
