@@ -2,7 +2,6 @@ name: Controllo Paganese
 
 on:
   workflow_dispatch:
-
   schedule:
     - cron: "0 7 * * *"
 
@@ -15,34 +14,45 @@ jobs:
 
     steps:
 
+      # ============================================================
+      # 1. CHECKOUT REPOSITORY
+      # ============================================================
+
       - name: Scarica repository
         uses: actions/checkout@v4
 
+
+      # ============================================================
+      # 2. INSTALLAZIONE STRUMENTI
+      # ============================================================
+
       - name: Installa strumenti
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq lynx poppler-utils
+          sudo apt-get update
+          sudo apt-get install -y lynx poppler-utils
 
-      - name: Analizza variazioni Paganese
+
+      # ============================================================
+      # 3. INIZIO CONTROLLO
+      # ============================================================
+
+      - name: Controllo calendario Paganese
+        shell: bash
         run: |
 
-          echo "======================================"
+          set -e
+
+          echo "===================================="
           echo "CONTROLLO AUTOMATICO PAGANESE"
-          echo "======================================"
-          date
-
-
-          # ======================================
-          # SCARICA COMUNICATI
-          # ======================================
+          echo "===================================="
+          date -u
 
           echo ""
           echo "Scarico elenco comunicati Serie D..."
-
+          
           lynx -dump -listonly \
-            "https://lnd.it/seried/comunicati/" \
-            > links.txt
-
+            "https://comunicati.lnd.it/pages/comunicati?categoria=Interregionale" \
+            > links.txt 2>/dev/null || true
 
           echo ""
           echo "Cerco PDF relativi a variazioni gare..."
@@ -51,773 +61,604 @@ jobs:
             | sed -E 's/^[[:space:]]*[0-9]+\.[[:space:]]*//' \
             > variazioni.txt || true
 
-
           echo ""
           echo "PDF trovati:"
 
           cat variazioni.txt || true
 
 
-          # ======================================
-          # PYTHON
-          # ======================================
+          # ========================================================
+          # 4. CONTROLLO CHE ESISTA IL CALENDARIO
+          # ========================================================
+
+          if [ ! -f "paganese.ics" ]; then
+            echo ""
+            echo "❌ ERRORE: paganese.ics non trovato."
+            exit 1
+          fi
+
+
+          # ========================================================
+          # 5. SCRIPT PYTHON DI ANALISI
+          # ========================================================
 
           python3 <<'PY'
 
           import re
+          import os
           import subprocess
           import unicodedata
-
-          from pathlib import Path
-          from urllib.request import urlretrieve
+          from datetime import datetime
 
 
-          # ======================================
-          # NORMALIZZAZIONE TESTO
-          # ======================================
+          ICS_FILE = "paganese.ics"
 
-          def normalizza(testo):
-
-              testo = unicodedata.normalize(
-                  "NFD",
-                  testo
-              )
-
-              testo = "".join(
-                  c
-                  for c in testo
-                  if unicodedata.category(c) != "Mn"
-              )
-
-              testo = testo.upper()
-
-              testo = testo.replace("’", "'")
-
-              testo = re.sub(
-                  r"[^A-Z0-9 ]",
-                  " ",
-                  testo
-              )
-
-              testo = re.sub(
-                  r"\s+",
-                  " ",
-                  testo
-              ).strip()
-
-              return testo
-
-
-          # ======================================
-          # DATA ICS → DATA LEGGIBILE
-          # ======================================
-
-          def formatta_data(data):
-
-              if not data:
-                  return "NON DISPONIBILE"
-
-              match = re.match(
-                  r"(\d{4})(\d{2})(\d{2})",
-                  data
-              )
-
-              if not match:
-                  return data
-
-              return (
-                  f"{match.group(3)}/"
-                  f"{match.group(2)}/"
-                  f"{match.group(1)}"
-              )
-
-
-          # ======================================
-          # ESTRAE DATA DA UNA RIGA DEL PDF
-          # ======================================
-
-          def estrai_data(riga):
-
-              match = re.search(
-                  r"(?:SABATO|DOMENICA|VENERDI|VENERDÌ|"
-                  r"GIOVEDI|GIOVEDÌ|MERCOLEDI|MERCOLEDÌ|"
-                  r"MARTEDI|MARTEDÌ|LUNEDI|LUNEDÌ)"
-                  r"\s+(\d{1,2})/(\d{1,2})/(\d{2,4})",
-                  riga.upper()
-              )
-
-              if not match:
-                  return None
-
-              giorno = int(match.group(1))
-              mese = int(match.group(2))
-              anno = int(match.group(3))
-
-              if anno < 100:
-                  anno += 2000
-
-              return (
-                  f"{anno:04d}"
-                  f"{mese:02d}"
-                  f"{giorno:02d}"
-              )
-
-
-          # ======================================
-          # ESTRAE ORA DA UNA RIGA DEL PDF
-          # ======================================
-
-          def estrai_ora(riga):
-
-              match = re.search(
-                  r"(?:ORE|ORA)\s+"
-                  r"(\d{1,2})[,.](\d{2})",
-                  riga.upper()
-              )
-
-              if not match:
-                  return None
-
-              ora = int(match.group(1))
-              minuti = int(match.group(2))
-
-              return f"{ora:02d}:{minuti:02d}"
-
-
-          # ======================================
-          # LEGGE ICS
-          # ======================================
 
           print("")
-          print("======================================")
+          print("====================================")
           print("LETTURA CALENDARIO PAGANESE")
-          print("======================================")
+          print("====================================")
 
 
-          ics_path = Path("paganese.ics")
+          # --------------------------------------------------------
+          # NORMALIZZAZIONE TESTO
+          # --------------------------------------------------------
 
-
-          if not ics_path.exists():
-
-              print(
-                  "ERRORE: paganese.ics non trovato!"
+          def normalize(text):
+              text = unicodedata.normalize("NFKD", text)
+              text = "".join(
+                  c for c in text
+                  if not unicodedata.combining(c)
               )
 
-              raise SystemExit(1)
+              text = text.upper()
+
+              text = text.replace("–", "-")
+              text = text.replace("—", "-")
+              text = text.replace("’", "'")
+
+              text = re.sub(r"[^A-Z0-9]+", " ", text)
+              text = re.sub(r"\s+", " ", text)
+
+              return text.strip()
 
 
-          contenuto = ics_path.read_text(
-              encoding="utf-8",
-              errors="ignore"
-          )
+          # --------------------------------------------------------
+          # LETTURA ICS
+          # --------------------------------------------------------
+
+          with open(ICS_FILE, "r", encoding="utf-8") as f:
+              ics_text = f.read()
 
 
-          # Unisce eventuali righe ICS continuate
-          contenuto = re.sub(
-              r"\r?\n[ \t]",
-              "",
-              contenuto
-          )
+          # Gestione eventuale line wrapping ICS
+          ics_unfolded = re.sub(r"\r?\n[ \t]", "", ics_text)
 
 
-          eventi = re.findall(
+          events = re.findall(
               r"BEGIN:VEVENT(.*?)END:VEVENT",
-              contenuto,
-              re.DOTALL
+              ics_unfolded,
+              flags=re.S
           )
 
 
           partite = []
 
 
-          for evento in eventi:
+          for event in events:
 
               summary_match = re.search(
-                  r"^SUMMARY:(.+)$",
-                  evento,
-                  re.MULTILINE
+                  r"^SUMMARY:(.*)$",
+                  event,
+                  flags=re.M
               )
-
 
               dtstart_match = re.search(
-                  r"^DTSTART[^:]*:(.+)$",
-                  evento,
-                  re.MULTILINE
+                  r"^DTSTART(?:;[^:]*)?:(\d{8}T\d{4,6})(?:Z)?$",
+                  event,
+                  flags=re.M
               )
 
+              dtend_match = re.search(
+                  r"^DTEND(?:;[^:]*)?:(\d{8}T\d{4,6})(?:Z)?$",
+                  event,
+                  flags=re.M
+              )
 
               if not summary_match:
                   continue
 
-
               summary = summary_match.group(1).strip()
 
-
-              data_ics = ""
-
-              if dtstart_match:
-
-                  data_ics = (
-                      dtstart_match.group(1).strip()
-                  )
-
-
-              if " - " not in summary:
+              if not dtstart_match:
+                  print(f"⚠️ DTSTART non trovato: {summary}")
                   continue
 
+              dtstart_raw = dtstart_match.group(1)
 
-              casa, trasferta = summary.split(
-                  " - ",
-                  1
-              )
+              if len(dtstart_raw) == 13:
+                  dtstart = datetime.strptime(
+                      dtstart_raw,
+                      "%Y%m%dT%H%M"
+                  )
+              else:
+                  dtstart = datetime.strptime(
+                      dtstart_raw,
+                      "%Y%m%dT%H%M%S"
+                  )
 
+              # ----------------------------------------------------
+              # Determina casa/trasferta
+              # ----------------------------------------------------
 
-              casa_norm = normalizza(casa)
-              trasferta_norm = normalizza(trasferta)
+              summary_norm = normalize(summary)
 
-
-              if casa_norm == "PAGANESE":
-
-                  avversario = trasferta_norm
+              if summary_norm.startswith("PAGANESE "):
                   ruolo = "CASA"
+                  avversario = summary[len("Paganese - "):].strip()
 
-              elif trasferta_norm == "PAGANESE":
-
-                  avversario = casa_norm
+              elif summary_norm.endswith(" PAGANESE"):
                   ruolo = "TRASFERTA"
+                  avversario = re.sub(
+                      r"\s*-\s*Paganese\s*$",
+                      "",
+                      summary,
+                      flags=re.I
+                  ).strip()
 
               else:
-
                   continue
 
 
               partite.append({
-
                   "summary": summary,
-
                   "avversario": avversario,
-
+                  "avversario_norm": normalize(avversario),
                   "ruolo": ruolo,
-
-                  "data_ics": data_ics,
-
-                  "data": formatta_data(data_ics)
-
+                  "dtstart": dtstart,
+                  "dtstart_raw": dtstart_raw,
+                  "event": event
               })
 
 
           print("")
-          print(
-              "PARTITE CARICATE:",
-              len(partite)
-          )
-
+          print(f"PARTITE CARICATE: {len(partite)}")
           print("")
 
 
-          for partita in partite:
-
+          if len(partite) != 34:
               print(
-                  f"- {partita['data']} | "
-                  f"{partita['summary']} | "
-                  f"{partita['ruolo']}"
+                  f"❌ ERRORE: attese 34 partite, "
+                  f"trovate {len(partite)}"
+              )
+              exit(1)
+
+
+          for p in partite:
+              print(
+                  f"- {p['dtstart'].strftime('%d/%m/%Y %H:%M')} | "
+                  f"{p['summary']} | {p['ruolo']}"
               )
 
 
-          # ======================================
-          # COMUNICATI
-          # ======================================
+          # --------------------------------------------------------
+          # FUNZIONE PER TROVARE UNA PARTITA
+          # --------------------------------------------------------
 
-          variazioni_path = Path(
-              "variazioni.txt"
+          def trova_partita(line):
+
+              line_norm = normalize(line)
+
+              if "PAGANESE" not in line_norm:
+                  return None
+
+              for p in partite:
+
+                  opponent_norm = p["avversario_norm"]
+
+                  if not opponent_norm:
+                      continue
+
+                  if opponent_norm in line_norm:
+
+                      return p
+
+              return None
+
+
+          # --------------------------------------------------------
+          # FUNZIONI DATA / ORA
+          # --------------------------------------------------------
+
+          mesi = {
+              "GENNAIO": 1,
+              "FEBBRAIO": 2,
+              "MARZO": 3,
+              "APRILE": 4,
+              "MAGGIO": 5,
+              "GIUGNO": 6,
+              "LUGLIO": 7,
+              "AGOSTO": 8,
+              "SETTEMBRE": 9,
+              "OTTOBRE": 10,
+              "NOVEMBRE": 11,
+              "DICEMBRE": 12
+          }
+
+
+          date_pattern = re.compile(
+              r"(?:"
+              r"LUNEDI|LUNEDÌ|"
+              r"MARTEDI|MARTEDÌ|"
+              r"MERCOLEDI|MERCOLEDÌ|"
+              r"GIOVEDI|GIOVEDÌ|"
+              r"VENERDI|VENERDÌ|"
+              r"SABATO|DOMENICA"
+              r")"
+              r"\s+"
+              r"(\d{1,2})/(\d{1,2})/(\d{2,4})",
+              re.I
           )
 
 
-          urls = []
+          time_pattern = re.compile(
+              r"\b(?:ORE|ORA)\s+(\d{1,2})[,.](\d{2})",
+              re.I
+          )
 
 
-          if variazioni_path.exists():
+          def parse_date(match):
 
-              urls = [
+              day = int(match.group(1))
+              month = int(match.group(2))
+              year = int(match.group(3))
 
-                  riga.strip()
+              if year < 100:
+                  year += 2000
 
-                  for riga in
-                  variazioni_path.read_text().splitlines()
+              return datetime(
+                  year,
+                  month,
+                  day
+              ).date()
 
-                  if riga.strip().startswith("http")
 
+          # --------------------------------------------------------
+          # SCARICA E ANALIZZA I PDF
+          # --------------------------------------------------------
+
+          with open("variazioni.txt", "r", encoding="utf-8") as f:
+              pdf_urls = [
+                  line.strip()
+                  for line in f
+                  if line.strip().startswith("http")
               ]
 
 
           print("")
-          print("======================================")
-          print(
-              "COMUNICATI DA ANALIZZARE:",
-              len(urls)
-          )
-          print("======================================")
+          print("====================================")
+          print(f"COMUNICATI DA ANALIZZARE: {len(pdf_urls)}")
+          print("====================================")
 
 
           variazioni_trovate = []
 
 
-          # ======================================
-          # ANALIZZA OGNI PDF
-          # ======================================
-
-          for numero_pdf, url in enumerate(
-              urls,
-              1
-          ):
+          for index, url in enumerate(pdf_urls, start=1):
 
               print("")
-              print(
-                  "######################################"
-              )
-
-              print(
-                  f"ANALIZZO COMUNICATO {numero_pdf}"
-              )
-
-              print(
-                  "######################################"
-              )
-
+              print("####################################")
+              print(f"ANALISI COMUNICATO {index}")
+              print("####################################")
               print(url)
 
 
-              pdf = (
-                  f"comunicato_{numero_pdf}.pdf"
+              pdf_file = f"comunicato_{index}.pdf"
+              txt_file = f"comunicato_{index}.txt"
+
+
+              subprocess.run(
+                  [
+                      "curl",
+                      "-L",
+                      "-s",
+                      "-o",
+                      pdf_file,
+                      url
+                  ],
+                  check=True
               )
 
-              txt = (
-                  f"comunicato_{numero_pdf}.txt"
+
+              subprocess.run(
+                  [
+                      "pdftotext",
+                      "-layout",
+                      pdf_file,
+                      txt_file
+                  ],
+                  check=True
               )
 
 
-              try:
-
-                  urlretrieve(
-                      url,
-                      pdf
-                  )
-
-
-                  subprocess.run(
-
-                      [
-                          "pdftotext",
-                          "-layout",
-                          pdf,
-                          txt
-                      ],
-
-                      check=True,
-
-                      capture_output=True
-
-                  )
+              with open(
+                  txt_file,
+                  "r",
+                  encoding="utf-8",
+                  errors="ignore"
+              ) as f:
+                  lines = f.readlines()
 
 
-                  testo = Path(
-                      txt
-                  ).read_text(
-                      encoding="utf-8",
-                      errors="ignore"
-                  )
+              # ----------------------------------------------------
+              # Cerca le righe GARA contenenti PAGANESE
+              # ----------------------------------------------------
 
+              for i, line in enumerate(lines):
 
-              except Exception as errore:
+                  if "PAGANESE" not in normalize(line):
+                      continue
 
-                  print("")
-                  print(
-                      "ERRORE LETTURA PDF:"
-                  )
-
-                  print(errore)
-
-                  continue
-
-
-              righe = testo.splitlines()
-
-
-              # ==================================
-              # CERCA LE PARTITE
-              # ==================================
-
-              for indice, riga in enumerate(
-                  righe
-              ):
-
-
-                  riga_norm = normalizza(
-                      riga
-                  )
-
-
-                  if "PAGANESE" not in riga_norm:
+                  if "GARA" not in normalize(line):
                       continue
 
 
-                  for partita in partite:
+                  partita = trova_partita(line)
 
 
-                      if (
-                          partita["avversario"]
-                          not in riga_norm
+                  # Se l'avversario non è tra le 34 partite
+                  # di campionato, viene ignorato.
+                  #
+                  # Questo è ciò che ci permette di ignorare
+                  # automaticamente Paganese-Palmese di Coppa Italia.
+
+                  if partita is None:
+                      continue
+
+
+                  print("")
+                  print("------------------------------------")
+                  print("PARTITA TROVATA")
+                  print("------------------------------------")
+                  print(f"ICS : {partita['summary']}")
+                  print(
+                      "DATA: "
+                      f"{partita['dtstart'].strftime('%d/%m/%Y')}"
+                  )
+                  print(
+                      "ORA : "
+                      f"{partita['dtstart'].strftime('%H:%M')}"
+                  )
+
+
+                  # ------------------------------------------------
+                  # PRENDE IL BLOCCO DELLA GARA
+                  # fino alla GARA successiva
+                  # ------------------------------------------------
+
+                  block_end = len(lines)
+
+                  for j in range(i + 1, len(lines)):
+
+                      if re.search(
+                          r"\bGARA\s+\d+",
+                          lines[j],
+                          flags=re.I
                       ):
-
-                          continue
-
-
-                      print("")
-                      print(
-                          "🚨🚨🚨 PARTITA TROVATA 🚨🚨🚨"
-                      )
-
-                      print("")
-
-                      print(
-                          "PARTITA:"
-                      )
-
-                      print(
-                          partita["summary"]
-                      )
-
-                      print(
-                          "DATA ATTUALE:"
-                      )
-
-                      print(
-                          partita["data"]
-                      )
+                          block_end = j
+                          break
 
 
-                      # ==========================
-                      # CERCA FINO ALLA GARA
-                      # SUCCESSIVA
-                      # ==========================
+                  block = lines[i:block_end]
 
-                      fine_blocco = len(
-                          righe
-                      )
+                  block_text = "".join(block)
 
 
-                      for j in range(
-                          indice + 1,
-                          len(righe)
-                      ):
+                  # ------------------------------------------------
+                  # ESTRAZIONE NUOVA DATA
+                  # ------------------------------------------------
 
-                          if re.search(
-                              r"\bGARA\s+\d+",
-                              righe[j],
-                              re.IGNORECASE
-                          ):
+                  nuova_data = None
 
-                              fine_blocco = j
+                  date_match = date_pattern.search(
+                      block_text
+                  )
 
-                              break
-
-
-                      blocco = righe[
-                          indice:fine_blocco
-                      ]
+                  if date_match:
+                      try:
+                          nuova_data = parse_date(
+                              date_match
+                          )
+                      except ValueError:
+                          nuova_data = None
 
 
-                      # ==========================
-                      # ESTRAI DATA E ORA
-                      # ==========================
+                  # ------------------------------------------------
+                  # ESTRAZIONE NUOVO ORARIO
+                  # ------------------------------------------------
 
-                      nuova_data = None
-                      nuova_ora = None
-                      nuovo_campo = None
+                  nuovo_orario = None
 
+                  time_match = time_pattern.search(
+                      block_text
+                  )
 
-                      for riga_blocco in blocco:
+                  if time_match:
 
+                      ora = int(time_match.group(1))
+                      minuti = int(time_match.group(2))
 
-                          if nuova_data is None:
-
-                              data_trovata = (
-                                  estrai_data(
-                                      riga_blocco
-                                  )
-                              )
-
-                              if data_trovata:
-
-                                  nuova_data = (
-                                      data_trovata
-                                  )
-
-
-                          if nuova_ora is None:
-
-                              ora_trovata = (
-                                  estrai_ora(
-                                      riga_blocco
-                                  )
-                              )
-
-                              if ora_trovata:
-
-                                  nuova_ora = (
-                                      ora_trovata
-                                  )
-
-
-                          riga_lower = (
-                              riga_blocco.lower()
+                      if 0 <= ora <= 23 and 0 <= minuti <= 59:
+                          nuovo_orario = (
+                              ora,
+                              minuti
                           )
 
 
-                          if (
-                              "campo " in riga_lower
-                              or "stadio " in riga_lower
-                              or "comunale " in riga_lower
-                          ):
+                  # ------------------------------------------------
+                  # MOSTRA EVENTUALI INFORMAZIONI
+                  # ------------------------------------------------
 
-                              testo_campo = (
-                                  riga_blocco.strip()
-                              )
-
-                              if testo_campo:
-
-                                  nuovo_campo = (
-                                      testo_campo
-                                  )
-
-
-                      # ==========================
-                      # RISULTATO PARSING
-                      # ==========================
-
-                      print("")
+                  if nuova_data:
                       print(
-                          "---------- VARIAZIONE LETTA ----------"
+                          "LND DATA : "
+                          f"{nuova_data.strftime('%d/%m/%Y')}"
+                      )
+                  else:
+                      print(
+                          "LND DATA : "
+                          "nessuna nuova data indicata"
                       )
 
 
-                      if nuova_data:
+                  if nuovo_orario:
+                      print(
+                          "LND ORA  : "
+                          f"{nuovo_orario[0]:02d}:"
+                          f"{nuovo_orario[1]:02d}"
+                      )
+                  else:
+                      print(
+                          "LND ORA  : "
+                          "nessun nuovo orario indicato"
+                      )
 
+
+                  # ------------------------------------------------
+                  # CONFRONTO
+                  # ------------------------------------------------
+
+                  cambio_data = (
+                      nuova_data is not None
+                      and nuova_data != partita["dtstart"].date()
+                  )
+
+
+                  cambio_orario = (
+                      nuovo_orario is not None
+                      and (
+                          nuovo_orario[0]
+                          != partita["dtstart"].hour
+                          or
+                          nuovo_orario[1]
+                          != partita["dtstart"].minute
+                      )
+                  )
+
+
+                  print("")
+
+
+                  if cambio_data or cambio_orario:
+
+                      print("⚠️ VARIAZIONE REALE RILEVATA")
+
+                      if cambio_data:
                           print(
-                              "NUOVA DATA:",
-                              formatta_data(
-                                  nuova_data
-                              )
+                              "   DATA DA CAMBIARE: "
+                              f"{partita['dtstart'].strftime('%d/%m/%Y')}"
+                              " → "
+                              f"{nuova_data.strftime('%d/%m/%Y')}"
                           )
 
-                      else:
-
+                      if cambio_orario:
                           print(
-                              "NUOVA DATA: "
-                              "nessuna indicata"
+                              "   ORARIO DA CAMBIARE: "
+                              f"{partita['dtstart'].strftime('%H:%M')}"
+                              " → "
+                              f"{nuovo_orario[0]:02d}:"
+                              f"{nuovo_orario[1]:02d}"
                           )
-
-
-                      if nuova_ora:
-
-                          print(
-                              "NUOVO ORARIO:",
-                              nuova_ora
-                          )
-
-                      else:
-
-                          print(
-                              "NUOVO ORARIO: "
-                              "nessuno indicato"
-                          )
-
-
-                      if nuovo_campo:
-
-                          print(
-                              "CAMPO:",
-                              nuovo_campo
-                          )
-
-                      else:
-
-                          print(
-                              "CAMPO: "
-                              "nessuna variazione indicata"
-                          )
-
-
-                      print(
-                          "--------------------------------------"
-                      )
-
-
-                      # ==========================
-                      # CONFRONTO
-                      # ==========================
-
-                      print("")
-                      print(
-                          "CONFRONTO CON CALENDARIO:"
-                      )
-
-
-                      if nuova_data:
-
-                          data_attuale = (
-                              partita["data_ics"]
-                          )
-
-                          if (
-                              nuova_data
-                              != data_attuale
-                          ):
-
-                              print(
-                                  "⚠️ DATA DA CAMBIARE"
-                              )
-
-                          else:
-
-                              print(
-                                  "✅ DATA INVARIATA"
-                              )
-
-
-                      if nuova_ora:
-
-                          print(
-                              "⚠️ ORARIO DA VERIFICARE:",
-                              nuova_ora
-                          )
-
-                      else:
-
-                          print(
-                              "✅ NESSUN CAMBIO ORARIO"
-                          )
-
-
-                      print("")
-                      print(
-                          "---------- BLOCCO ORIGINALE ----------"
-                      )
-
-
-                      for riga_blocco in blocco:
-
-                          print(
-                              riga_blocco
-                          )
-
-
-                      print(
-                          "--------------------------------------"
-                      )
 
 
                       variazioni_trovate.append({
-
-                          "partita":
-                              partita["summary"],
-
-                          "data_attuale":
-                              partita["data"],
-
-                          "nuova_data":
-                              nuova_data,
-
-                          "nuova_ora":
-                              nuova_ora,
-
-                          "campo":
-                              nuovo_campo,
-
-                          "fonte":
-                              url
-
+                          "partita": partita,
+                          "nuova_data": nuova_data,
+                          "nuovo_orario": nuovo_orario
                       })
 
+                  else:
 
-          # ======================================
+                      print(
+                          "✅ Nessuna modifica necessaria "
+                          "per questa partita."
+                      )
+
+
+          # --------------------------------------------------------
           # RISULTATO FINALE
-          # ======================================
+          # --------------------------------------------------------
 
           print("")
-          print("======================================")
+          print("====================================")
           print("RISULTATO FINALE")
-          print("======================================")
+          print("====================================")
 
 
           if variazioni_trovate:
 
               print("")
-
               print(
-                  "🚨 VARIAZIONI INDIVIDUATE:"
+                  f"⚠️ VARIAZIONI REALI TROVATE: "
+                  f"{len(variazioni_trovate)}"
               )
 
-              print("")
+              for v in variazioni_trovate:
 
-
-              for variazione in (
-                  variazioni_trovate
-              ):
-
-                  print(
-                      "PARTITA:",
-                      variazione["partita"]
-                  )
-
-                  print(
-                      "DATA ATTUALE:",
-                      variazione["data_attuale"]
-                  )
-
-                  print(
-                      "NUOVA DATA:",
-                      variazione["nuova_data"]
-                      or "invariata"
-                  )
-
-                  print(
-                      "NUOVO ORARIO:",
-                      variazione["nuova_ora"]
-                      or "invariato"
-                  )
-
-                  print(
-                      "FONTE:",
-                      variazione["fonte"]
-                  )
+                  p = v["partita"]
 
                   print("")
+                  print(f"PARTITA: {p['summary']}")
 
+                  print(
+                      "ATTUALE: "
+                      f"{p['dtstart'].strftime('%d/%m/%Y %H:%M')}"
+                  )
+
+                  if v["nuova_data"]:
+                      data_txt = v["nuova_data"].strftime(
+                          "%d/%m/%Y"
+                      )
+                  else:
+                      data_txt = p["dtstart"].strftime(
+                          "%d/%m/%Y"
+                      )
+
+                  if v["nuovo_orario"]:
+                      ora_txt = (
+                          f"{v['nuovo_orario'][0]:02d}:"
+                          f"{v['nuovo_orario'][1]:02d}"
+                      )
+                  else:
+                      ora_txt = p["dtstart"].strftime(
+                          "%H:%M"
+                      )
+
+                  print(
+                      "NUOVA : "
+                      f"{data_txt} {ora_txt}"
+                  )
+
+              print("")
+              print(
+                  "ℹ️ SIMULAZIONE: "
+                  "il calendario NON è stato modificato."
+              )
 
           else:
 
               print("")
+              print("✅ Nessuna variazione trovata.")
+              print("")
               print(
-                  "✅ Nessuna variazione trovata."
+                  "Il calendario resta invariato."
               )
 
 
-          print(
-              "======================================"
-          )
-
-          print(
-              "TEST COMPLETATO"
-          )
-
-          print(
-              "CALENDARIO NON MODIFICATO"
-          )
-
-          print(
-              "======================================"
-
-          )
+          print("")
+          print("====================================")
+          print("TEST COMPLETATO")
+          print("CALENDARIO NON MODIFICATO")
+          print("====================================")
 
           PY
