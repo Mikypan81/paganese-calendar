@@ -6,7 +6,7 @@ on:
     - cron: "0 7 * * *"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   controllo:
@@ -33,10 +33,10 @@ jobs:
 
 
       # ============================================================
-      # 3. INIZIO CONTROLLO
+      # 3. CONTROLLO E AGGIORNAMENTO
       # ============================================================
 
-      - name: Controllo calendario Paganese
+      - name: Controlla e aggiorna calendario Paganese
         shell: bash
         run: |
 
@@ -47,12 +47,18 @@ jobs:
           echo "===================================="
           date -u
 
+
+          # ========================================================
+          # 4. SCARICA ELENCO COMUNICATI
+          # ========================================================
+
           echo ""
           echo "Scarico elenco comunicati Serie D..."
-          
+
           lynx -dump -listonly \
             "https://comunicati.lnd.it/pages/comunicati?categoria=Interregionale" \
             > links.txt 2>/dev/null || true
+
 
           echo ""
           echo "Cerco PDF relativi a variazioni gare..."
@@ -61,6 +67,7 @@ jobs:
             | sed -E 's/^[[:space:]]*[0-9]+\.[[:space:]]*//' \
             > variazioni.txt || true
 
+
           echo ""
           echo "PDF trovati:"
 
@@ -68,7 +75,7 @@ jobs:
 
 
           # ========================================================
-          # 4. CONTROLLO CHE ESISTA IL CALENDARIO
+          # 5. CONTROLLO CALENDARIO
           # ========================================================
 
           if [ ! -f "paganese.ics" ]; then
@@ -79,16 +86,15 @@ jobs:
 
 
           # ========================================================
-          # 5. SCRIPT PYTHON DI ANALISI
+          # 6. SCRIPT PYTHON
           # ========================================================
 
           python3 <<'PY'
 
           import re
-          import os
           import subprocess
           import unicodedata
-          from datetime import datetime
+          from datetime import datetime, date
 
 
           ICS_FILE = "paganese.ics"
@@ -100,12 +106,14 @@ jobs:
           print("====================================")
 
 
-          # --------------------------------------------------------
-          # NORMALIZZAZIONE TESTO
-          # --------------------------------------------------------
+          # ========================================================
+          # NORMALIZZAZIONE
+          # ========================================================
 
           def normalize(text):
+
               text = unicodedata.normalize("NFKD", text)
+
               text = "".join(
                   c for c in text
                   if not unicodedata.combining(c)
@@ -117,22 +125,39 @@ jobs:
               text = text.replace("—", "-")
               text = text.replace("’", "'")
 
-              text = re.sub(r"[^A-Z0-9]+", " ", text)
-              text = re.sub(r"\s+", " ", text)
+              text = re.sub(
+                  r"[^A-Z0-9]+",
+                  " ",
+                  text
+              )
+
+              text = re.sub(
+                  r"\s+",
+                  " ",
+                  text
+              )
 
               return text.strip()
 
 
-          # --------------------------------------------------------
+          # ========================================================
           # LETTURA ICS
-          # --------------------------------------------------------
+          # ========================================================
 
-          with open(ICS_FILE, "r", encoding="utf-8") as f:
+          with open(
+              ICS_FILE,
+              "r",
+              encoding="utf-8"
+          ) as f:
               ics_text = f.read()
 
 
-          # Gestione eventuale line wrapping ICS
-          ics_unfolded = re.sub(r"\r?\n[ \t]", "", ics_text)
+          # Unfolding standard ICS
+          ics_unfolded = re.sub(
+              r"\r?\n[ \t]",
+              "",
+              ics_text
+          )
 
 
           events = re.findall(
@@ -144,6 +169,10 @@ jobs:
 
           partite = []
 
+
+          # ========================================================
+          # ESTRAZIONE EVENTI
+          # ========================================================
 
           for event in events:
 
@@ -168,37 +197,53 @@ jobs:
               if not summary_match:
                   continue
 
-              summary = summary_match.group(1).strip()
-
               if not dtstart_match:
-                  print(f"⚠️ DTSTART non trovato: {summary}")
                   continue
+
+
+              summary = summary_match.group(1).strip()
 
               dtstart_raw = dtstart_match.group(1)
 
+
               if len(dtstart_raw) == 13:
+
                   dtstart = datetime.strptime(
                       dtstart_raw,
                       "%Y%m%dT%H%M"
                   )
+
               else:
+
                   dtstart = datetime.strptime(
                       dtstart_raw,
                       "%Y%m%dT%H%M%S"
                   )
 
-              # ----------------------------------------------------
-              # Determina casa/trasferta
-              # ----------------------------------------------------
+
+              # ====================================================
+              # CASA / TRASFERTA
+              # ====================================================
 
               summary_norm = normalize(summary)
 
+
               if summary_norm.startswith("PAGANESE "):
+
                   ruolo = "CASA"
-                  avversario = summary[len("Paganese - "):].strip()
+
+                  avversario = re.sub(
+                      r"^Paganese\s*-\s*",
+                      "",
+                      summary,
+                      flags=re.I
+                  ).strip()
+
 
               elif summary_norm.endswith(" PAGANESE"):
+
                   ruolo = "TRASFERTA"
+
                   avversario = re.sub(
                       r"\s*-\s*Paganese\s*$",
                       "",
@@ -206,7 +251,9 @@ jobs:
                       flags=re.I
                   ).strip()
 
+
               else:
+
                   continue
 
 
@@ -217,6 +264,7 @@ jobs:
                   "ruolo": ruolo,
                   "dtstart": dtstart,
                   "dtstart_raw": dtstart_raw,
+                  "dtend_match": dtend_match,
                   "event": event
               })
 
@@ -227,64 +275,28 @@ jobs:
 
 
           if len(partite) != 34:
+
               print(
                   f"❌ ERRORE: attese 34 partite, "
                   f"trovate {len(partite)}"
               )
+
               exit(1)
 
 
           for p in partite:
+
               print(
-                  f"- {p['dtstart'].strftime('%d/%m/%Y %H:%M')} | "
-                  f"{p['summary']} | {p['ruolo']}"
+                  f"- "
+                  f"{p['dtstart'].strftime('%d/%m/%Y %H:%M')} | "
+                  f"{p['summary']} | "
+                  f"{p['ruolo']}"
               )
 
 
-          # --------------------------------------------------------
-          # FUNZIONE PER TROVARE UNA PARTITA
-          # --------------------------------------------------------
-
-          def trova_partita(line):
-
-              line_norm = normalize(line)
-
-              if "PAGANESE" not in line_norm:
-                  return None
-
-              for p in partite:
-
-                  opponent_norm = p["avversario_norm"]
-
-                  if not opponent_norm:
-                      continue
-
-                  if opponent_norm in line_norm:
-
-                      return p
-
-              return None
-
-
-          # --------------------------------------------------------
-          # FUNZIONI DATA / ORA
-          # --------------------------------------------------------
-
-          mesi = {
-              "GENNAIO": 1,
-              "FEBBRAIO": 2,
-              "MARZO": 3,
-              "APRILE": 4,
-              "MAGGIO": 5,
-              "GIUGNO": 6,
-              "LUGLIO": 7,
-              "AGOSTO": 8,
-              "SETTEMBRE": 9,
-              "OTTOBRE": 10,
-              "NOVEMBRE": 11,
-              "DICEMBRE": 12
-          }
-
+          # ========================================================
+          # REGEX DATA / ORARIO
+          # ========================================================
 
           date_pattern = re.compile(
               r"(?:"
@@ -307,7 +319,39 @@ jobs:
           )
 
 
-          def parse_date(match):
+          # ========================================================
+          # DATA SENZA GIORNO DELLA SETTIMANA
+          # Serve per intestazioni tipo:
+          #
+          # Gare del 6 settembre 2026
+          # ========================================================
+
+          month_pattern = re.compile(
+              r"\b(\d{1,2})\s+"
+              r"(GENNAIO|FEBBRAIO|MARZO|APRILE|MAGGIO|GIUGNO|"
+              r"LUGLIO|AGOSTO|SETTEMBRE|OTTOBRE|NOVEMBRE|DICEMBRE)"
+              r"(?:\s+(\d{4}))?",
+              re.I
+          )
+
+
+          mesi = {
+              "GENNAIO": 1,
+              "FEBBRAIO": 2,
+              "MARZO": 3,
+              "APRILE": 4,
+              "MAGGIO": 5,
+              "GIUGNO": 6,
+              "LUGLIO": 7,
+              "AGOSTO": 8,
+              "SETTEMBRE": 9,
+              "OTTOBRE": 10,
+              "NOVEMBRE": 11,
+              "DICEMBRE": 12
+          }
+
+
+          def parse_numeric_date(match):
 
               day = int(match.group(1))
               month = int(match.group(2))
@@ -316,18 +360,139 @@ jobs:
               if year < 100:
                   year += 2000
 
-              return datetime(
+              return date(
                   year,
                   month,
                   day
-              ).date()
+              )
 
 
-          # --------------------------------------------------------
-          # SCARICA E ANALIZZA I PDF
-          # --------------------------------------------------------
+          def parse_text_date(match, default_year=2026):
 
-          with open("variazioni.txt", "r", encoding="utf-8") as f:
+              day = int(match.group(1))
+
+              month_name = (
+                  match.group(2)
+                  .upper()
+                  .replace("Ì", "I")
+              )
+
+              year_text = match.group(3)
+
+              if year_text:
+                  year = int(year_text)
+              else:
+                  year = default_year
+
+              return date(
+                  year,
+                  mesi[month_name],
+                  day
+              )
+
+
+          # ========================================================
+          # TROVA DATA DI RIFERIMENTO DEL COMUNICATO
+          # ========================================================
+
+          def find_reference_date(lines, start_index):
+
+              # Cerchiamo all'indietro una intestazione tipo:
+              #
+              # Gare del 6 settembre 2026
+              #
+              # oppure una data numerica.
+
+              limite = max(
+                  0,
+                  start_index - 80
+              )
+
+
+              for k in range(
+                  start_index - 1,
+                  limite - 1,
+                  -1
+              ):
+
+                  testo = lines[k]
+
+
+                  match = re.search(
+                      r"GARE\s+DEL\s+"
+                      r"(\d{1,2})\s+"
+                      r"([A-ZÀ-Ü]+)"
+                      r"(?:\s+(\d{4}))?",
+                      testo,
+                      flags=re.I
+                  )
+
+
+                  if match:
+
+                      try:
+
+                          return parse_text_date(
+                              match,
+                              default_year=2026
+                          )
+
+                      except Exception:
+                          pass
+
+
+                  match = date_pattern.search(testo)
+
+                  if match:
+
+                      try:
+
+                          return parse_numeric_date(
+                              match
+                          )
+
+                      except Exception:
+                          pass
+
+
+              return None
+
+
+          # ========================================================
+          # TROVA PARTITE CANDIDATE
+          # ========================================================
+
+          def find_candidates(line):
+
+              line_norm = normalize(line)
+
+              if "PAGANESE" not in line_norm:
+                  return []
+
+
+              candidates = []
+
+
+              for p in partite:
+
+                  if p["avversario_norm"] in line_norm:
+
+                      candidates.append(p)
+
+
+              return candidates
+
+
+          # ========================================================
+          # SCARICA PDF
+          # ========================================================
+
+          with open(
+              "variazioni.txt",
+              "r",
+              encoding="utf-8"
+          ) as f:
+
               pdf_urls = [
                   line.strip()
                   for line in f
@@ -337,18 +502,30 @@ jobs:
 
           print("")
           print("====================================")
-          print(f"COMUNICATI DA ANALIZZARE: {len(pdf_urls)}")
+          print(
+              f"COMUNICATI DA ANALIZZARE: "
+              f"{len(pdf_urls)}"
+          )
           print("====================================")
 
 
           variazioni_trovate = []
 
 
-          for index, url in enumerate(pdf_urls, start=1):
+          # ========================================================
+          # ANALISI COMUNICATI
+          # ========================================================
+
+          for index, url in enumerate(
+              pdf_urls,
+              start=1
+          ):
 
               print("")
               print("####################################")
-              print(f"ANALISI COMUNICATO {index}")
+              print(
+                  f"ANALISI COMUNICATO {index}"
+              )
               print("####################################")
               print(url)
 
@@ -387,124 +564,254 @@ jobs:
                   encoding="utf-8",
                   errors="ignore"
               ) as f:
+
                   lines = f.readlines()
 
 
-              # ----------------------------------------------------
-              # Cerca le righe GARA contenenti PAGANESE
-              # ----------------------------------------------------
+              # ====================================================
+              # CERCA GARE PAGANESE
+              # ====================================================
 
               for i, line in enumerate(lines):
 
-                  if "PAGANESE" not in normalize(line):
+                  line_norm = normalize(line)
+
+
+                  if "PAGANESE" not in line_norm:
                       continue
 
-                  if "GARA" not in normalize(line):
+
+                  if "GARA" not in line_norm:
                       continue
 
 
-                  partita = trova_partita(line)
+                  candidates = find_candidates(line)
 
 
-                  # Se l'avversario non è tra le 34 partite
-                  # di campionato, viene ignorato.
+                  # Nessun avversario del campionato
                   #
-                  # Questo è ciò che ci permette di ignorare
-                  # automaticamente Paganese-Palmese di Coppa Italia.
+                  # Esempio:
+                  # Paganese - Palmese
+                  #
+                  # viene ignorata se Palmese non è nel calendario.
 
-                  if partita is None:
+                  if not candidates:
                       continue
 
 
-                  print("")
-                  print("------------------------------------")
-                  print("PARTITA TROVATA")
-                  print("------------------------------------")
-                  print(f"ICS : {partita['summary']}")
-                  print(
-                      "DATA: "
-                      f"{partita['dtstart'].strftime('%d/%m/%Y')}"
-                  )
-                  print(
-                      "ORA : "
-                      f"{partita['dtstart'].strftime('%H:%M')}"
-                  )
-
-
-                  # ------------------------------------------------
-                  # PRENDE IL BLOCCO DELLA GARA
-                  # fino alla GARA successiva
-                  # ------------------------------------------------
+                  # ==================================================
+                  # BLOCCO DELLA GARA
+                  # ==================================================
 
                   block_end = len(lines)
 
-                  for j in range(i + 1, len(lines)):
+
+                  for j in range(
+                      i + 1,
+                      len(lines)
+                  ):
 
                       if re.search(
                           r"\bGARA\s+\d+",
                           lines[j],
                           flags=re.I
                       ):
+
                           block_end = j
                           break
 
 
-                  block = lines[i:block_end]
+                  block = lines[
+                      i:block_end
+                  ]
+
 
                   block_text = "".join(block)
 
 
-                  # ------------------------------------------------
-                  # ESTRAZIONE NUOVA DATA
-                  # ------------------------------------------------
+                  # ==================================================
+                  # DATA DI RIFERIMENTO DELLA GIORNATA
+                  # ==================================================
+
+                  reference_date = find_reference_date(
+                      lines,
+                      i
+                  )
+
+
+                  # ==================================================
+                  # NUOVA DATA ESPLICITA
+                  # ==================================================
 
                   nuova_data = None
+
 
                   date_match = date_pattern.search(
                       block_text
                   )
 
+
                   if date_match:
+
                       try:
-                          nuova_data = parse_date(
+
+                          nuova_data = parse_numeric_date(
                               date_match
                           )
-                      except ValueError:
+
+                      except Exception:
+
                           nuova_data = None
 
 
-                  # ------------------------------------------------
-                  # ESTRAZIONE NUOVO ORARIO
-                  # ------------------------------------------------
+                  # ==================================================
+                  # NUOVO ORARIO
+                  # ==================================================
 
                   nuovo_orario = None
+
 
                   time_match = time_pattern.search(
                       block_text
                   )
 
+
                   if time_match:
 
-                      ora = int(time_match.group(1))
-                      minuti = int(time_match.group(2))
+                      ora = int(
+                          time_match.group(1)
+                      )
 
-                      if 0 <= ora <= 23 and 0 <= minuti <= 59:
+                      minuti = int(
+                          time_match.group(2)
+                      )
+
+
+                      if (
+                          0 <= ora <= 23
+                          and
+                          0 <= minuti <= 59
+                      ):
+
                           nuovo_orario = (
                               ora,
                               minuti
                           )
 
 
-                  # ------------------------------------------------
-                  # MOSTRA EVENTUALI INFORMAZIONI
-                  # ------------------------------------------------
+                  # ==================================================
+                  # IDENTIFICAZIONE PARTITA CORRETTA
+                  # ==================================================
+
+                  partita = None
+
+
+                  # --------------------------------------------------
+                  # Caso ideale:
+                  # una sola partita con quell'avversario
+                  # --------------------------------------------------
+
+                  if len(candidates) == 1:
+
+                      partita = candidates[0]
+
+
+                  # --------------------------------------------------
+                  # Due partite contro lo stesso avversario:
+                  # usiamo la data della giornata come discriminante.
+                  # --------------------------------------------------
+
+                  else:
+
+                      if reference_date:
+
+                          stesso_giorno = [
+                              p
+                              for p in candidates
+                              if p["dtstart"].date()
+                              == reference_date
+                          ]
+
+
+                          if len(stesso_giorno) == 1:
+
+                              partita = stesso_giorno[0]
+
+
+                  # --------------------------------------------------
+                  # Se non siamo sicuri, NON MODIFICHIAMO NULLA.
+                  # --------------------------------------------------
+
+                  if partita is None:
+
+                      print("")
+                      print(
+                          "⚠️ PARTITA NON IDENTIFICATA "
+                          "CON SUFFICIENTE SICUREZZA"
+                      )
+
+                      print(
+                          "   Riga:",
+                          line.strip()
+                      )
+
+                      if reference_date:
+
+                          print(
+                              "   Data riferimento:",
+                              reference_date.strftime(
+                                  "%d/%m/%Y"
+                              )
+                          )
+
+                      print(
+                          "   Il calendario NON verrà modificato."
+                      )
+
+                      continue
+
+
+                  # ==================================================
+                  # STAMPA DATI
+                  # ==================================================
+
+                  print("")
+                  print("------------------------------------")
+                  print("PARTITA IDENTIFICATA")
+                  print("------------------------------------")
+
+                  print(
+                      f"ICS : {partita['summary']}"
+                  )
+
+                  print(
+                      "DATA: "
+                      f"{partita['dtstart'].strftime('%d/%m/%Y')}"
+                  )
+
+                  print(
+                      "ORA : "
+                      f"{partita['dtstart'].strftime('%H:%M')}"
+                  )
+
+
+                  if reference_date:
+
+                      print(
+                          "GIORNATA PDF: "
+                          f"{reference_date.strftime('%d/%m/%Y')}"
+                      )
+
 
                   if nuova_data:
+
                       print(
                           "LND DATA : "
                           f"{nuova_data.strftime('%d/%m/%Y')}"
                       )
+
                   else:
+
                       print(
                           "LND DATA : "
                           "nessuna nuova data indicata"
@@ -512,31 +819,37 @@ jobs:
 
 
                   if nuovo_orario:
+
                       print(
                           "LND ORA  : "
                           f"{nuovo_orario[0]:02d}:"
                           f"{nuovo_orario[1]:02d}"
                       )
+
                   else:
+
                       print(
                           "LND ORA  : "
                           "nessun nuovo orario indicato"
                       )
 
 
-                  # ------------------------------------------------
+                  # ==================================================
                   # CONFRONTO
-                  # ------------------------------------------------
+                  # ==================================================
 
                   cambio_data = (
                       nuova_data is not None
-                      and nuova_data != partita["dtstart"].date()
+                      and
+                      nuova_data
+                      != partita["dtstart"].date()
                   )
 
 
                   cambio_orario = (
                       nuovo_orario is not None
-                      and (
+                      and
+                      (
                           nuovo_orario[0]
                           != partita["dtstart"].hour
                           or
@@ -546,119 +859,389 @@ jobs:
                   )
 
 
-                  print("")
+                  # ==================================================
+                  # SE NON CAMBIA NULLA
+                  # ==================================================
 
+                  if not cambio_data and not cambio_orario:
 
-                  if cambio_data or cambio_orario:
-
-                      print("⚠️ VARIAZIONE REALE RILEVATA")
-
-                      if cambio_data:
-                          print(
-                              "   DATA DA CAMBIARE: "
-                              f"{partita['dtstart'].strftime('%d/%m/%Y')}"
-                              " → "
-                              f"{nuova_data.strftime('%d/%m/%Y')}"
-                          )
-
-                      if cambio_orario:
-                          print(
-                              "   ORARIO DA CAMBIARE: "
-                              f"{partita['dtstart'].strftime('%H:%M')}"
-                              " → "
-                              f"{nuovo_orario[0]:02d}:"
-                              f"{nuovo_orario[1]:02d}"
-                          )
-
-
-                      variazioni_trovate.append({
-                          "partita": partita,
-                          "nuova_data": nuova_data,
-                          "nuovo_orario": nuovo_orario
-                      })
-
-                  else:
-
+                      print("")
                       print(
-                          "✅ Nessuna modifica necessaria "
-                          "per questa partita."
+                          "✅ Nessuna modifica necessaria."
                       )
 
-
-          # --------------------------------------------------------
-          # RISULTATO FINALE
-          # --------------------------------------------------------
-
-          print("")
-          print("====================================")
-          print("RISULTATO FINALE")
-          print("====================================")
+                      continue
 
 
-          if variazioni_trovate:
-
-              print("")
-              print(
-                  f"⚠️ VARIAZIONI REALI TROVATE: "
-                  f"{len(variazioni_trovate)}"
-              )
-
-              for v in variazioni_trovate:
-
-                  p = v["partita"]
+                  # ==================================================
+                  # VARIAZIONE REALE
+                  # ==================================================
 
                   print("")
-                  print(f"PARTITA: {p['summary']}")
-
                   print(
-                      "ATTUALE: "
-                      f"{p['dtstart'].strftime('%d/%m/%Y %H:%M')}"
+                      "⚠️ VARIAZIONE REALE RILEVATA"
                   )
 
-                  if v["nuova_data"]:
-                      data_txt = v["nuova_data"].strftime(
-                          "%d/%m/%Y"
-                      )
-                  else:
-                      data_txt = p["dtstart"].strftime(
-                          "%d/%m/%Y"
-                      )
 
-                  if v["nuovo_orario"]:
-                      ora_txt = (
-                          f"{v['nuovo_orario'][0]:02d}:"
-                          f"{v['nuovo_orario'][1]:02d}"
-                      )
-                  else:
-                      ora_txt = p["dtstart"].strftime(
-                          "%H:%M"
-                      )
+                  vecchia_data = (
+                      partita["dtstart"].date()
+                  )
+
+
+                  vecchia_ora = (
+                      partita["dtstart"].hour,
+                      partita["dtstart"].minute
+                  )
+
+
+                  nuova_data_effettiva = (
+                      nuova_data
+                      if nuova_data
+                      else vecchia_data
+                  )
+
+
+                  nuovo_orario_effettivo = (
+                      nuovo_orario
+                      if nuovo_orario
+                      else vecchia_ora
+                  )
+
+
+                  nuova_dtstart = datetime(
+                      nuova_data_effettiva.year,
+                      nuova_data_effettiva.month,
+                      nuova_data_effettiva.day,
+                      nuovo_orario_effettivo[0],
+                      nuovo_orario_effettivo[1],
+                      partita["dtstart"].second
+                  )
+
 
                   print(
-                      "NUOVA : "
-                      f"{data_txt} {ora_txt}"
+                      "   DA: "
+                      f"{partita['dtstart'].strftime('%d/%m/%Y %H:%M')}"
                   )
+
+                  print(
+                      "   A : "
+                      f"{nuova_dtstart.strftime('%d/%m/%Y %H:%M')}"
+                  )
+
+
+                  variazioni_trovate.append({
+                      "partita": partita,
+                      "nuova_dtstart": nuova_dtstart,
+                      "cambio_data": cambio_data,
+                      "cambio_orario": cambio_orario
+                  })
+
+
+          # ========================================================
+          # RISULTATO ANALISI
+          # ========================================================
+
+          print("")
+          print("====================================")
+          print("RISULTATO ANALISI")
+          print("====================================")
+
+
+          if not variazioni_trovate:
 
               print("")
               print(
-                  "ℹ️ SIMULAZIONE: "
-                  "il calendario NON è stato modificato."
+                  "✅ Nessuna variazione da applicare."
               )
 
-          else:
-
-              print("")
-              print("✅ Nessuna variazione trovata.")
               print("")
               print(
-                  "Il calendario resta invariato."
+                  "CALENDARIO NON MODIFICATO."
               )
+
+              print("")
+              print("====================================")
+              print("FINE CONTROLLO")
+              print("====================================")
+
+              exit(0)
+
+
+          print("")
+          print(
+              f"⚠️ VARIAZIONI DA APPLICARE: "
+              f"{len(variazioni_trovate)}"
+          )
+
+
+          # ========================================================
+          # MODIFICA ICS
+          # ========================================================
+
+          print("")
+          print("====================================")
+          print("AGGIORNAMENTO PAGANESE.ICS")
+          print("====================================")
+
+
+          nuovo_ics = ics_unfolded
+
+
+          for v in variazioni_trovate:
+
+              partita = v["partita"]
+              nuova_dtstart = v["nuova_dtstart"]
+
+
+              vecchio_event = partita["event"]
+
+
+              # ----------------------------------------------------
+              # Nuovo DTSTART
+              # ----------------------------------------------------
+
+              nuovo_dtstart_raw = nuova_dtstart.strftime(
+                  "%Y%m%dT%H%M%S"
+              )
+
+
+              nuovo_event = re.sub(
+                  r"^DTSTART(;[^:]*)?:\d{8}T\d{4,6}(?:Z)?$",
+                  lambda m:
+                      "DTSTART"
+                      + (
+                          m.group(1)
+                          if m.group(1)
+                          else ""
+                      )
+                      + ":"
+                      + nuovo_dtstart_raw,
+                  vecchio_event,
+                  count=1,
+                  flags=re.M
+              )
+
+
+              # ----------------------------------------------------
+              # Aggiorna DTEND mantenendo la durata
+              # ----------------------------------------------------
+
+              dtend_match = re.search(
+                  r"^DTEND(;[^:]*)?:(\d{8}T\d{4,6})(?:Z)?$",
+                  vecchio_event,
+                  flags=re.M
+              )
+
+
+              if dtend_match:
+
+                  old_dtend_raw = dtend_match.group(2)
+
+
+                  if len(old_dtend_raw) == 13:
+
+                      old_dtend = datetime.strptime(
+                          old_dtend_raw,
+                          "%Y%m%dT%H%M"
+                      )
+
+                  else:
+
+                      old_dtend = datetime.strptime(
+                          old_dtend_raw,
+                          "%Y%m%dT%H%M%S"
+                      )
+
+
+                  old_dtstart = partita["dtstart"]
+
+
+                  durata = (
+                      old_dtend - old_dtstart
+                  )
+
+
+                  nuova_dtend = (
+                      nuova_dtstart + durata
+                  )
+
+
+                  nuovo_dtend_raw = nuova_dtend.strftime(
+                      "%Y%m%dT%H%M%S"
+                  )
+
+
+                  nuovo_event = re.sub(
+                      r"^DTEND(;[^:]*)?:\d{8}T\d{4,6}(?:Z)?$",
+                      lambda m:
+                          "DTEND"
+                          + (
+                              m.group(1)
+                              if m.group(1)
+                              else ""
+                          )
+                          + ":"
+                          + nuovo_dtend_raw,
+                      nuovo_event,
+                      count=1,
+                      flags=re.M
+                  )
+
+
+              # ----------------------------------------------------
+              # Sostituzione evento nel calendario
+              # ----------------------------------------------------
+
+              if vecchio_event not in nuovo_ics:
+
+                  print("")
+                  print(
+                      "❌ ERRORE: evento originale "
+                      "non trovato nell'ICS."
+                  )
+
+                  print(
+                      partita["summary"]
+                  )
+
+                  exit(1)
+
+
+              nuovo_ics = nuovo_ics.replace(
+                  vecchio_event,
+                  nuovo_event,
+                  1
+              )
+
+
+              print("")
+              print(
+                  "✅ AGGIORNATA:"
+              )
+
+              print(
+                  f"   {partita['summary']}"
+              )
+
+              print(
+                  "   "
+                  f"{partita['dtstart'].strftime('%d/%m/%Y %H:%M')}"
+                  " → "
+                  f"{nuova_dtstart.strftime('%d/%m/%Y %H:%M')}"
+              )
+
+
+          # ========================================================
+          # CONTROLLO FINALE NUMERO EVENTI
+          # ========================================================
+
+          eventi_finali = re.findall(
+              r"BEGIN:VEVENT(.*?)END:VEVENT",
+              nuovo_ics,
+              flags=re.S
+          )
 
 
           print("")
           print("====================================")
-          print("TEST COMPLETATO")
-          print("CALENDARIO NON MODIFICATO")
+          print("VERIFICA FINALE")
+          print("====================================")
+
+
+          print(
+              f"Eventi prima : {len(events)}"
+          )
+
+          print(
+              f"Eventi dopo  : {len(eventi_finali)}"
+          )
+
+
+          if len(eventi_finali) != 34:
+
+              print("")
+              print(
+                  "❌ ERRORE: il calendario "
+                  "non contiene più 34 partite."
+              )
+
+              print(
+                  "ABORT: nessuna modifica verrà salvata."
+              )
+
+              exit(1)
+
+
+          # ========================================================
+          # SALVATAGGIO
+          # ========================================================
+
+          with open(
+              ICS_FILE,
+              "w",
+              encoding="utf-8",
+              newline=""
+          ) as f:
+
+              f.write(
+                  nuovo_ics
+              )
+
+
+          print("")
+          print(
+              "✅ paganese.ics aggiornato correttamente."
+          )
+
+
+          print("")
+          print("====================================")
+          print("AGGIORNAMENTO COMPLETATO")
           print("====================================")
 
           PY
+
+
+      # ============================================================
+      # 7. COMMIT AUTOMATICO
+      # ============================================================
+
+      - name: Salva modifiche su GitHub
+        shell: bash
+        run: |
+
+          if git diff --quiet -- paganese.ics; then
+
+            echo "Nessuna modifica da salvare."
+
+            exit 0
+
+          fi
+
+
+          echo "Modifiche rilevate in paganese.ics."
+
+
+          git config user.name \
+            "github-actions[bot]"
+
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+
+          git add paganese.ics
+
+
+          git commit \
+            -m "Aggiorna calendario Paganese"
+
+
+          git push
+
+
+          echo ""
+          echo "===================================="
+          echo "CALENDARIO PUBBLICATO"
+          echo "===================================="
+
+          echo "La modifica è stata inviata a GitHub."
