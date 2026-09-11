@@ -2,34 +2,33 @@ name: Studio calendario completo LND
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  analisi-calendario:
+  aggiorna-calendario:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Scarica repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Installa strumenti
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y curl python3
+      - name: Configura Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
 
-      - name: Scarica tutte le giornate e trova la Paganese
+      - name: Estrai calendario LND
         run: |
-          set -e
-
-          python3 - <<'PY'
-          import html
+          cat > estrai_calendario.py <<'PYTHON'
           import json
           import re
-          import time
+          import urllib.request
+          from datetime import datetime
           from pathlib import Path
-          from urllib.request import Request, urlopen
 
           BASE_URL = (
               "https://gare.lnd.it/competizione/"
@@ -37,222 +36,371 @@ jobs:
               "?campionato=ID"
               "&giornata={giornata}"
               "&girone=G"
-              "&leg=first"
+              "&leg={leg}"
               "&stagione=2026"
           )
 
-          NOME_PAGANESE = "paganese"
+          SQUADRA = "Paganese"
 
           def scarica_pagina(url):
-              richiesta = Request(
+              richiesta = urllib.request.Request(
                   url,
                   headers={
-                      "User-Agent": "Mozilla/5.0"
-                  }
-              )
-
-              with urlopen(richiesta, timeout=30) as risposta:
-                  contenuto = risposta.read()
-
-              return contenuto.decode(
-                  "utf-8",
-                  errors="ignore"
-              )
-
-          def pulisci_testo(testo):
-              testo = html.unescape(testo)
-              testo = testo.replace("\\/", "/")
-              testo = testo.replace("\\u0022", '"')
-              testo = testo.replace("\\u0027", "'")
-              return testo
-
-          def estrai_json_da_script(testo):
-              testo = pulisci_testo(testo)
-              decoder = json.JSONDecoder()
-
-              for posizione, carattere in enumerate(testo):
-                  if carattere not in "{[":
-                      continue
-
-                  candidato = testo[posizione:].strip()
-
-                  try:
-                      oggetto, caratteri_letti = decoder.raw_decode(
-                          candidato
+                      "User-Agent": (
+                          "Mozilla/5.0 "
+                          "(X11; Linux x86_64) "
+                          "AppleWebKit/537.36 "
+                          "Chrome/131 Safari/537.36"
                       )
-                      return oggetto
+                  },
+              )
 
-                  except Exception:
-                      continue
+              with urllib.request.urlopen(
+                  richiesta,
+                  timeout=30
+              ) as risposta:
+                  return risposta.read().decode("utf-8", errors="replace")
 
-              return None
+          def estrai_partite(html):
+              """
+              Cerca nei tag script il JSON contenente:
+              root.props.matches
+              """
 
-          def cerca_matches(valore, percorso="root", profondita=0):
+              pattern = re.compile(
+                  r'"matches"\s*:\s*(\[[\s\S]*?\])\s*[,}]'
+              )
+
               risultati = []
 
-              if profondita > 12:
-                  return risultati
+              for script in re.findall(
+                  r"<script[^>]*>([\s\S]*?)</script>",
+                  html,
+                  flags=re.IGNORECASE,
+              ):
+                  if '"matches"' not in script:
+                      continue
 
-              if isinstance(valore, dict):
-                  for chiave, contenuto in valore.items():
-                      nuovo_percorso = f"{percorso}.{chiave}"
+                  match = pattern.search(script)
 
-                      if str(chiave).lower() == "matches":
-                          risultati.append(
-                              (nuovo_percorso, contenuto)
-                          )
+                  if not match:
+                      continue
 
-                      risultati.extend(
-                          cerca_matches(
-                              contenuto,
-                              nuovo_percorso,
-                              profondita + 1
-                          )
-                      )
+                  testo_json = match.group(1)
 
-              elif isinstance(valore, list):
-                  for indice, contenuto in enumerate(valore):
-                      risultati.extend(
-                          cerca_matches(
-                              contenuto,
-                              f"{percorso}[{indice}]",
-                              profondita + 1
-                          )
-                      )
+                  try:
+                      partite = json.loads(testo_json)
+
+                      if isinstance(partite, list):
+                          risultati = partite
+                          break
+
+                  except json.JSONDecodeError:
+                      continue
 
               return risultati
 
-          def estrai_partite_da_html(pagina):
-              scripts = re.findall(
-                  r"<script\b[^>]*>(.*?)</script>",
-                  pagina,
-                  flags=re.IGNORECASE | re.DOTALL
+          def valore(partita, *chiavi):
+              for chiave in chiavi:
+                  if chiave in partita:
+                      return partita[chiave]
+
+              return ""
+
+          def normalizza(testo):
+              return re.sub(
+                  r"\s+",
+                  " ",
+                  str(testo or "").strip().lower()
               )
 
-              for contenuto_script in scripts:
-                  testo = pulisci_testo(contenuto_script)
+          def chiave_univoca(partita):
+              """
+              L'ID LND è il metodo più sicuro.
+              Come fallback usiamo data + squadre.
+              """
 
-                  parole_interessanti = [
-                      "matches",
-                      "paganese",
-                      "sassari",
-                      "matchday",
-                      "calendar"
-                  ]
+              identificativo = valore(
+                  partita,
+                  "id",
+                  "match_id",
+                  "matchId",
+                  "gara_id",
+                  "garaId",
+              )
 
-                  if not any(
-                      parola.lower() in testo.lower()
-                      for parola in parole_interessanti
-                  ):
-                      continue
+              if identificativo:
+                  return f"id:{identificativo}"
 
-                  oggetto = estrai_json_da_script(testo)
+              data = valore(
+                  partita,
+                  "date",
+                  "data",
+                  "match_date",
+                  "matchDate",
+                  "datetime",
+                  "dateTime",
+              )
 
-                  if oggetto is None:
-                      continue
+              casa = valore(
+                  partita,
+                  "home",
+                  "home_team",
+                  "homeTeam",
+                  "squadra_casa",
+                  "squadraCasa",
+                  "team_home",
+                  "teamHome",
+              )
 
-                  risultati_matches = cerca_matches(oggetto)
+              trasferta = valore(
+                  partita,
+                  "away",
+                  "away_team",
+                  "awayTeam",
+                  "squadra_trasferta",
+                  "squadraTrasferta",
+                  "team_away",
+                  "teamAway",
+              )
 
-                  for percorso, matches in risultati_matches:
-                      if percorso == "root.props.matches":
-                          if isinstance(matches, list):
-                              return matches
+              return (
+                  f"fallback:"
+                  f"{normalizza(data)}|"
+                  f"{normalizza(casa)}|"
+                  f"{normalizza(trasferta)}"
+              )
 
-              return []
+          def nome_squadra(partita, lato):
+              if lato == "casa":
+                  chiavi = (
+                      "home",
+                      "home_team",
+                      "homeTeam",
+                      "squadra_casa",
+                      "squadraCasa",
+                      "team_home",
+                      "teamHome",
+                  )
+              else:
+                  chiavi = (
+                      "away",
+                      "away_team",
+                      "awayTeam",
+                      "squadra_trasferta",
+                      "squadraTrasferta",
+                      "team_away",
+                      "teamAway",
+                  )
 
-          tutte_le_partite = []
-          giornate_con_dati = 0
+              risultato = valore(partita, *chiavi)
 
-          print("========================================")
-          print("SCARICO LE 34 GIORNATE DEL GIRONE G")
-          print("========================================")
+              if isinstance(risultato, dict):
+                  return (
+                      risultato.get("name")
+                      or risultato.get("nome")
+                      or risultato.get("team_name")
+                      or risultato.get("teamName")
+                      or ""
+                  )
 
-          for giornata in range(1, 35):
-              url = BASE_URL.format(giornata=giornata)
+              return str(risultato or "")
 
-              print()
-              print("----------------------------------------")
-              print(f"GIORNATA {giornata}")
-              print("----------------------------------------")
-              print(url)
+          def partita_paganese(partita):
+              casa = normalizza(nome_squadra(partita, "casa"))
+              trasferta = normalizza(nome_squadra(partita, "trasferta"))
 
-              try:
-                  pagina = scarica_pagina(url)
-                  partite = estrai_partite_da_html(pagina)
+              return (
+                  "paganese" in casa
+                  or "paganese" in trasferta
+              )
 
-                  print("Partite trovate:", len(partite))
+          def data_partita(partita):
+              data = valore(
+                  partita,
+                  "date",
+                  "data",
+                  "match_date",
+                  "matchDate",
+                  "datetime",
+                  "dateTime",
+              )
 
-                  if partite:
-                      giornate_con_dati += 1
+              return str(data or "")
+
+          tutte_le_partite = {}
+          statistiche = []
+
+          # L'andata ha 17 giornate.
+          # Il ritorno ha altre 17 giornate.
+          configurazioni = [
+              ("andata", "first"),
+              ("ritorno", "second"),
+          ]
+
+          for nome_leg, valore_leg in configurazioni:
+              print("")
+              print("=" * 70)
+              print(f"LETTURA {nome_leg.upper()} - parametro leg={valore_leg}")
+              print("=" * 70)
+
+              for giornata in range(1, 18):
+                  url = BASE_URL.format(
+                      giornata=giornata,
+                      leg=valore_leg,
+                  )
+
+                  try:
+                      html = scarica_pagina(url)
+                      partite = estrai_partite(html)
+
+                      print(
+                          f"{nome_leg.capitalize()} "
+                          f"giornata {giornata}: "
+                          f"partite trovate = {len(partite)}"
+                      )
+
+                      nuove = 0
+                      duplicate = 0
 
                       for partita in partite:
-                          partita["giornata"] = giornata
-                          tutte_le_partite.append(partita)
+                          chiave = chiave_univoca(partita)
 
-                  else:
-                      print("ATTENZIONE: nessuna partita trovata.")
+                          if chiave in tutte_le_partite:
+                              duplicate += 1
+                              continue
 
-              except Exception as errore:
-                  print("ERRORE:", str(errore))
+                          partita["_leg"] = nome_leg
+                          partita["_giornata_pagina"] = giornata
+                          tutte_le_partite[chiave] = partita
+                          nuove += 1
 
-              time.sleep(1)
+                      statistiche.append({
+                          "leg": nome_leg,
+                          "giornata": giornata,
+                          "partite": len(partite),
+                          "nuove": nuove,
+                          "duplicate": duplicate,
+                      })
 
-          print()
-          print("========================================")
-          print("RISULTATO COMPLESSIVO")
-          print("========================================")
-          print("Giornate con dati:", giornate_con_dati)
-          print("Partite totali raccolte:", len(tutte_le_partite))
+                      print(
+                          f"  Nuove: {nuove} | "
+                          f"Duplicate: {duplicate}"
+                      )
 
-          partite_paganese = []
+                  except Exception as errore:
+                      print(
+                          f"ERRORE {nome_leg} giornata {giornata}: "
+                          f"{errore}"
+                      )
 
-          for partita in tutte_le_partite:
-              casa = str(partita.get("home", ""))
-              ospite = str(partita.get("away", ""))
+          partite_uniche = list(tutte_le_partite.values())
 
-              if (
-                  NOME_PAGANESE in casa.lower()
-                  or NOME_PAGANESE in ospite.lower()
-              ):
-                  partite_paganese.append(partita)
+          partite_paganese = [
+              partita
+              for partita in partite_uniche
+              if partita_paganese(partita)
+          ]
 
-          partite_paganese.sort(
-              key=lambda partita: (
-                  partita.get("date") or "",
-                  partita.get("time") or "",
-                  partita.get("id") or 0
+          def chiave_ordinamento(partita):
+              return (
+                  data_partita(partita),
+                  str(
+                      valore(
+                          partita,
+                          "id",
+                          "match_id",
+                          "matchId",
+                      )
+                  ),
               )
+
+          partite_paganese.sort(key=chiave_ordinamento)
+
+          print("")
+          print("=" * 70)
+          print("RISULTATO FINALE")
+          print("=" * 70)
+          print(f"Partite uniche raccolte: {len(partite_uniche)}")
+          print(f"Partite Paganese: {len(partite_paganese)}")
+          print("")
+
+          for indice, partita in enumerate(partite_paganese, start=1):
+              identificativo = valore(
+                  partita,
+                  "id",
+                  "match_id",
+                  "matchId",
+                  "gara_id",
+                  "garaId",
+              )
+
+              casa = nome_squadra(partita, "casa")
+              trasferta = nome_squadra(partita, "trasferta")
+              data = data_partita(partita)
+
+              print(
+                  f"{indice:02d}. "
+                  f"{data} | "
+                  f"{casa} - {trasferta} | "
+                  f"ID: {identificativo} | "
+                  f"Pagina: {partita.get('_leg')} "
+                  f"{partita.get('_giornata_pagina')}"
+              )
+
+          # Salvataggio del JSON completo per eventuali controlli futuri.
+          Path("partite_lnd.json").write_text(
+              json.dumps(
+                  partite_uniche,
+                  ensure_ascii=False,
+                  indent=2,
+              ),
+              encoding="utf-8",
           )
 
-          print()
-          print("========================================")
-          print("PARTITE DELLA PAGANESE")
-          print("========================================")
-          print("Numero partite Paganese:", len(partite_paganese))
+          Path("partite_paganese.json").write_text(
+              json.dumps(
+                  partite_paganese,
+                  ensure_ascii=False,
+                  indent=2,
+              ),
+              encoding="utf-8",
+          )
 
-          for indice, partita in enumerate(
-              partite_paganese,
-              start=1
-          ):
-              print()
-              print("----------------------------------------")
-              print(f"PARTITA PAGANESE {indice}")
-              print("----------------------------------------")
+          if len(partite_paganese) != 34:
+              print("")
+              print(
+                  "ATTENZIONE: il numero di partite Paganese "
+                  f"è {len(partite_paganese)}, non 34."
+              )
+              print(
+                  "Controllare il parametro utilizzato dal sito "
+                  "per il ritorno."
+              )
+          else:
+              print("")
+              print(
+                  "OK: trovate esattamente 34 partite Paganese."
+              )
+          PYTHON
 
-              print("ID:", partita.get("id"))
-              print("Giornata:", partita.get("giornata"))
-              print("Data:", partita.get("date"))
-              print("Ora:", partita.get("time"))
-              print("Casa:", partita.get("home"))
-              print("Ospite:", partita.get("away"))
-              print("Campo:", partita.get("field"))
-              print("Indirizzo:", partita.get("fieldAddress"))
-              print("Risultato:", partita.get("homeGoals"), "-", partita.get("awayGoals"))
-              print("Giocata:", partita.get("isPlayed"))
-              print("Riprogrammata:", partita.get("isRescheduled"))
+          python estrai_calendario.py
 
-          print()
-          print("========================================")
-          print("FINE ANALISI")
-          print("========================================")
-          PY
+      - name: Mostra file generati
+        run: |
+          echo "File generati:"
+          ls -lah partite_lnd.json partite_paganese.json
+
+      - name: Commit dei risultati
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add partite_lnd.json partite_paganese.json
+
+          if git diff --cached --quiet; then
+            echo "Nessuna modifica da salvare."
+          else
+            git commit -m "Aggiorna calendario Paganese"
+            git push
+          fi
