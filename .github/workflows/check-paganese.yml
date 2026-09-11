@@ -19,23 +19,19 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y curl grep sed
 
-      - name: Studia pagina ufficiale LND
+      - name: Individua API calendario LND
         shell: bash
         run: |
           set -e
 
           echo "===================================="
-          echo "STUDIO PAGINA UFFICIALE LND"
+          echo "RICERCA API CALENDARIO LND"
           echo "===================================="
 
           URL="https://gare.lnd.it/competizione/dipartimento-interregionale?campionato=ID&giornata=2&girone=G&leg=first&stagione=2026"
 
           echo ""
-          echo "URL controllato:"
-          echo "$URL"
-
-          echo ""
-          echo "Scarico la pagina..."
+          echo "Scarico la pagina ufficiale..."
 
           curl -L \
             --fail \
@@ -52,48 +48,53 @@ jobs:
 
           echo ""
           echo "===================================="
-          echo "PRIME 80 RIGHE DELLA PAGINA"
+          echo "OCCORRENZE DI API/AS400"
           echo "===================================="
 
-          sed -n '1,80p' pagina.html
-
-          echo ""
-          echo "===================================="
-          echo "RICERCA PAGANESE"
-          echo "===================================="
-
-          grep -in "paganese" pagina.html || true
+          grep -oE '.{0,250}api/as400.{0,400}' pagina.html \
+            | head -20 \
+            || true
 
           echo ""
           echo "===================================="
-          echo "RICERCA SASSARI"
+          echo "OCCORRENZE ORGANIZZAZIONE"
           echo "===================================="
 
-          grep -in "sassari" pagina.html || true
+          grep -oiE '.{0,200}organizzazione.{0,300}' pagina.html \
+            | head -30 \
+            || true
 
           echo ""
           echo "===================================="
-          echo "RICERCA PAROLE API / JSON"
+          echo "OCCORRENZE CAMPIONATO"
           echo "===================================="
 
-          grep -Eoi \
-            'https?[^"'\'' ]+|/[^"'\'' ]*(api|json)[^"'\'' ]*' \
+          grep -oiE '.{0,200}campionato.{0,300}' pagina.html \
+            | head -30 \
+            || true
+
+          echo ""
+          echo "===================================="
+          echo "OCCORRENZE GIRONE"
+          echo "===================================="
+
+          grep -oiE '.{0,200}girone.{0,300}' pagina.html \
+            | head -30 \
+            || true
+
+          echo ""
+          echo "===================================="
+          echo "URL E STRINGHE INTERESSANTI"
+          echo "===================================="
+
+          grep -Eo \
+            'https?://[^"'\'' ]+|/api/[^"'\'' ]+' \
             pagina.html \
+            | sort -u \
             | head -100 \
             || true
 
           echo ""
           echo "===================================="
-          echo "SCRIPT JAVASCRIPT PRESENTI"
-          echo "===================================="
-
-          grep -Eoi \
-            '<script[^>]+src="[^"]+"' \
-            pagina.html \
-            | head -100 \
-            || true
-
-          echo ""
-          echo "===================================="
-          echo "FINE STUDIO"
+          echo "FINE RICERCA"
           echo "===================================="
