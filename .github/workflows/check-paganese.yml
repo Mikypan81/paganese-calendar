@@ -1,88 +1,607 @@
-echo
-echo "========================================"
-echo "ANALISI COMPLETA JSON INCORPORATI"
-echo "========================================"
+name: Controllo Paganese
 
-python3 - <<'PY'
-import re
-import json
-from pathlib import Path
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 7 * * *"
 
-html = Path("pagina.html").read_text(encoding="utf-8", errors="ignore")
+permissions:
+  contents: write
 
-scripts = re.findall(
-    r'<script[^>]*type=["\']application/json["\'][^>]*>(.*?)</script>',
-    html,
-    flags=re.S | re.I
-)
+jobs:
+  controllo-calendario:
+    runs-on: ubuntu-latest
 
-print(f"Script JSON trovati: {len(scripts)}")
+    steps:
+      - name: Scarica repository
+        uses: actions/checkout@v4
 
-def walk(value, path="root", depth=0):
-    if depth > 8:
-        return
+      - name: Installa strumenti
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lynx poppler-utils
 
-    if isinstance(value, dict):
-        for key, child in value.items():
-            key_path = f"{path}.{key}"
+      - name: Scarica pagina ufficiale LND
+        run: |
+          set -e
 
-            key_lower = str(key).lower()
+          URL="https://gare.lnd.it/competizione/dipartimento-interregionale?campionato=ID&giornata=2&girone=G&leg=first&stagione=2026"
 
-            if any(word in key_lower for word in [
-                "match",
-                "game",
-                "home",
-                "away",
-                "date",
-                "score",
-                "team",
-                "playday",
-                "calendar"
-            ]):
-                print(f"CHIAVE INTERESSANTE: {key_path}")
+          echo "========================================"
+          echo "SCARICO PAGINA UFFICIALE LND"
+          echo "========================================"
+          echo "URL: $URL"
 
-                if isinstance(child, (dict, list)):
-                    try:
-                        preview = json.dumps(
-                            child,
-                            ensure_ascii=False,
-                            indent=2
-                        )
-                        print(preview[:3000])
-                    except Exception:
-                        print(repr(child)[:3000])
-                else:
-                    print(repr(child)[:1000])
+          curl -L --fail --silent --show-error \
+            -A "Mozilla/5.0" \
+            "$URL" \
+            -o pagina.html
 
-            walk(child, key_path, depth + 1)
+          echo
+          echo "Dimensione pagina:"
+          wc -c pagina.html
 
-    elif isinstance(value, list):
-        for index, child in enumerate(value[:100]):
-            walk(child, f"{path}[{index}]", depth + 1)
+      - name: Cerca comunicati con variazioni
+        run: |
+          set -e
 
-for index, raw in enumerate(scripts, start=1):
-    print()
-    print("----------------------------------------")
-    print(f"SCRIPT JSON NUMERO {index}")
-    print("----------------------------------------")
+          echo
+          echo "========================================"
+          echo "RICERCA PDF DELLE VARIAZIONI"
+          echo "========================================"
 
-    try:
-        data = json.loads(raw)
-    except Exception as exc:
-        print(f"JSON non valido: {exc}")
-        continue
+          lynx -dump -listonly \
+            "https://comunicati.lnd.it/pages/comunicati" \
+            > links.txt || true
 
-    if isinstance(data, dict):
-        print("Chiavi principali:")
-        for key in data.keys():
-            print(f" - {key}")
+          grep -i "variazioni.*\.pdf" links.txt \
+            | sed -E 's/^[[:space:]]*[0-9]+\.[[:space:]]*//' \
+            | sed 's/[[:space:]]*$//' \
+            | sort -u \
+            > variazioni.txt || true
 
-    print()
-    print("Ricerca ricorsiva delle chiavi interessanti:")
-    walk(data)
-PY
+          echo
+          echo "PDF individuati:"
+          cat variazioni.txt || true
 
-echo
-echo "========================================"
-echo "FINE ANALISI JSON"
-echo "========================================"
+          mkdir -p pdf
+
+          if [ -s variazioni.txt ]; then
+            while IFS= read -r PDF_URL; do
+              [ -z "$PDF_URL" ] && continue
+
+              FILE_NAME="$(basename "$PDF_URL")"
+
+              echo
+              echo "Scarico: $PDF_URL"
+
+              curl -L --fail --silent --show-error \
+                -A "Mozilla/5.0" \
+                "$PDF_URL" \
+                -o "pdf/$FILE_NAME" || true
+            done < variazioni.txt
+          fi
+
+          echo
+          echo "PDF scaricati:"
+          find pdf -type f -maxdepth 1 -print || true
+
+      - name: Converti PDF in testo
+        run: |
+          set -e
+
+          echo
+          echo "========================================"
+          echo "CONVERSIONE PDF"
+          echo "========================================"
+
+          mkdir -p testi
+
+          for PDF_FILE in pdf/*.pdf; do
+            [ -f "$PDF_FILE" ] || continue
+
+            BASE_NAME="$(basename "$PDF_FILE" .pdf)"
+
+            pdftotext -layout \
+              "$PDF_FILE" \
+              "testi/$BASE_NAME.txt" || true
+
+            echo "Convertito: $PDF_FILE"
+          done
+
+      - name: Controlla e aggiorna calendario
+        run: |
+          set -e
+
+          python3 <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+          from datetime import datetime, timedelta
+
+          ICS_PATH = Path("paganese.ics")
+          PDF_TEXT_DIR = Path("testi")
+
+          if not ICS_PATH.exists():
+              print("ERRORE: il file paganese.ics non esiste.")
+              sys.exit(1)
+
+          ics = ICS_PATH.read_text(encoding="utf-8", errors="ignore")
+
+          # ------------------------------------------------------------
+          # LETTURA EVENTI PRESENTI NEL CALENDARIO
+          # ------------------------------------------------------------
+
+          event_pattern = re.compile(
+              r"BEGIN:VEVENT.*?END:VEVENT",
+              re.S
+          )
+
+          events = list(event_pattern.finditer(ics))
+
+          print()
+          print("========================================")
+          print("EVENTI PRESENTI NEL CALENDARIO")
+          print("========================================")
+          print(f"Eventi trovati: {len(events)}")
+
+          if len(events) != 34:
+              print("ERRORE: il calendario non contiene esattamente 34 partite.")
+              print("Nessuna modifica eseguita per sicurezza.")
+              sys.exit(1)
+
+          # Ogni evento viene trasformato in una struttura consultabile.
+          calendar_matches = []
+
+          for index, match in enumerate(events):
+              block = match.group(0)
+
+              summary_match = re.search(
+                  r"SUMMARY:(.*)",
+                  block
+              )
+
+              dtstart_match = re.search(
+                  r"DTSTART(?:;TZID=[^:]+)?:([0-9]{8}T[0-9]{6})",
+                  block
+              )
+
+              dtend_match = re.search(
+                  r"DTEND(?:;TZID=[^:]+)?:([0-9]{8}T[0-9]{6})",
+                  block
+              )
+
+              if not summary_match or not dtstart_match:
+                  print(f"Evento {index + 1}: dati incompleti, ignorato.")
+                  continue
+
+              summary = summary_match.group(1).strip()
+              start_raw = dtstart_match.group(1)
+              end_raw = dtend_match.group(1) if dtend_match else None
+
+              date_obj = datetime.strptime(
+                  start_raw,
+                  "%Y%m%dT%H%M%S"
+              )
+
+              # Ricaviamo casa/trasferta dal titolo.
+              if " - Paganese" in summary:
+                  opponent = summary.replace(" - Paganese", "").strip()
+                  role = "TRASFERTA"
+              elif summary.startswith("Paganese - "):
+                  opponent = summary.replace("Paganese - ", "").strip()
+                  role = "CASA"
+              else:
+                  opponent = summary
+                  role = "SCONOSCIUTA"
+
+              calendar_matches.append({
+                  "index": index,
+                  "summary": summary,
+                  "opponent": opponent,
+                  "role": role,
+                  "date": date_obj,
+                  "start_raw": start_raw,
+                  "end_raw": end_raw,
+                  "block": block,
+                  "match_start": match.start(),
+                  "match_end": match.end(),
+              })
+
+              print(
+                  f"{index + 1:02d}. "
+                  f"{date_obj.strftime('%d/%m/%Y %H:%M')} - "
+                  f"{summary} - {role}"
+              )
+
+          # ------------------------------------------------------------
+          # NORMALIZZAZIONE NOMI
+          # ------------------------------------------------------------
+
+          def normalize(text):
+              text = text.upper()
+              text = text.replace("–", "-")
+              text = text.replace("—", "-")
+              text = text.replace("’", "'")
+              text = re.sub(r"\s+", " ", text)
+              return text.strip()
+
+          # Alcuni nomi possono essere scritti in modo leggermente
+          # diverso nei comunicati ufficiali.
+          aliases = {
+              "SASSARI LATTE DOLCE": [
+                  "SASSARI LATTE DOLCE",
+                  "LATTE DOLCE"
+              ],
+              "U. S. VENAFRO": [
+                  "U. S. VENAFRO",
+                  "US VENAFRO",
+                  "VENAFRO"
+              ],
+              "CITTA DI ANAGNI": [
+                  "CITTA DI ANAGNI",
+                  "CITTÀ DI ANAGNI",
+                  "ANAGNI"
+              ],
+              "SARRABUS OGLIASTRA": [
+                  "SARRABUS OGLIASTRA",
+                  "SARRABUS"
+              ],
+              "ATLETICO LODIGIANI": [
+                  "ATLETICO LODIGIANI",
+                  "LODIGIANI"
+              ],
+              "MONASTIR 1983": [
+                  "MONASTIR 1983",
+                  "MONASTIR"
+              ],
+          }
+
+          def opponent_variants(opponent):
+              normalized = normalize(opponent)
+
+              if normalized in aliases:
+                  return aliases[normalized]
+
+              return [normalized]
+
+          # ------------------------------------------------------------
+          # LETTURA DEI PDF
+          # ------------------------------------------------------------
+
+          pdf_texts = []
+
+          for txt_file in sorted(PDF_TEXT_DIR.glob("*.txt")):
+              text = txt_file.read_text(
+                  encoding="utf-8",
+                  errors="ignore"
+              )
+
+              pdf_texts.append({
+                  "file": txt_file.name,
+                  "text": text
+              })
+
+              print()
+              print("----------------------------------------")
+              print(f"Analizzo: {txt_file.name}")
+              print("----------------------------------------")
+
+          if not pdf_texts:
+              print("Nessun PDF di variazione disponibile.")
+              print("Nessuna modifica necessaria.")
+              sys.exit(0)
+
+          # ------------------------------------------------------------
+          # RICERCA DELLE GARE NEI PDF
+          # ------------------------------------------------------------
+
+          updates = []
+
+          for calendar_match in calendar_matches:
+              opponent = calendar_match["opponent"]
+              role = calendar_match["role"]
+              current_date = calendar_match["date"]
+
+              variants = opponent_variants(opponent)
+
+              possible_blocks = []
+
+              for pdf in pdf_texts:
+                  text = pdf["text"]
+
+                  # I comunicati normalmente riportano:
+                  #
+                  # GARA XX PAGANESE - SQUADRA
+                  # oppure
+                  # GARA XX SQUADRA - PAGANESE
+                  #
+                  # Prendiamo il blocco fino alla gara successiva.
+                  gara_pattern = re.compile(
+                      r"GARA\s+\d+\s+([^\n]+)"
+                      r"(.*?)(?=GARA\s+\d+\s+|\Z)",
+                      re.S | re.I
+                  )
+
+                  for gara_match in gara_pattern.finditer(text):
+                      header = gara_match.group(1).strip()
+                      body = gara_match.group(2)
+
+                      header_normalized = normalize(header)
+
+                      if "PAGANESE" not in header_normalized:
+                          continue
+
+                      found_opponent = False
+
+                      for variant in variants:
+                          if normalize(variant) in header_normalized:
+                              found_opponent = True
+                              break
+
+                      if not found_opponent:
+                          continue
+
+                      possible_blocks.append({
+                          "file": pdf["file"],
+                          "header": header,
+                          "body": body,
+                          "full": gara_match.group(0)
+                      })
+
+              if not possible_blocks:
+                  continue
+
+              # --------------------------------------------------------
+              # ESTRAZIONE DATA E ORA
+              # --------------------------------------------------------
+
+              extracted_date = None
+              extracted_time = None
+
+              for item in possible_blocks:
+                  body = item["body"]
+                  full_block = item["full"]
+
+                  # Esempi possibili:
+                  # Sabato 29/08/26 ore 20,00
+                  # Domenica 06/09/2026 ore 15,00
+                  # Ore 20,30
+                  # ore 14.30
+                  #
+                  # Prima cerchiamo una data completa.
+                  date_match = re.search(
+                      r"(?:Lunedì|Lunedi|Martedì|Martedi|Mercoledì|Mercoledi|"
+                      r"Giovedì|Giovedi|Venerdì|Venerdi|Sabato|Domenica)?"
+                      r"\s*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})",
+                      body,
+                      re.I
+                  )
+
+                  if date_match:
+                      day = int(date_match.group(1))
+                      month = int(date_match.group(2))
+                      year = int(date_match.group(3))
+
+                      if year < 100:
+                          year += 2000
+
+                      try:
+                          extracted_date = current_date.replace(
+                              year=year,
+                              month=month,
+                              day=day
+                          )
+                      except ValueError:
+                          pass
+
+                  time_match = re.search(
+                      r"\b(?:ore|h)\s*"
+                      r"(\d{1,2})"
+                      r"(?:[,:.](\d{2}))?",
+                      body,
+                      re.I
+                  )
+
+                  if time_match:
+                      hour = int(time_match.group(1))
+                      minute = int(time_match.group(2) or 0)
+
+                      if 0 <= hour <= 23 and 0 <= minute <= 59:
+                          extracted_time = (
+                              extracted_date or current_date
+                          ).replace(
+                              hour=hour,
+                              minute=minute,
+                              second=0
+                          )
+
+                  if extracted_date is not None or extracted_time is not None:
+                      break
+
+              if extracted_date is None and extracted_time is None:
+                  print()
+                  print(
+                      f"Variazione trovata per {opponent}, "
+                      f"ma senza nuova data/orario leggibile."
+                  )
+                  continue
+
+              new_date = extracted_time or extracted_date
+
+              if extracted_date is not None and extracted_time is None:
+                  new_date = extracted_date.replace(
+                      hour=current_date.hour,
+                      minute=current_date.minute,
+                      second=0
+                  )
+
+              if extracted_date is None and extracted_time is not None:
+                  new_date = current_date.replace(
+                      hour=extracted_time.hour,
+                      minute=extracted_time.minute,
+                      second=0
+                  )
+
+              if new_date == current_date:
+                  print(
+                      f"Nessuna variazione effettiva: "
+                      f"{calendar_match['summary']}"
+                  )
+                  continue
+
+              updates.append({
+                  "calendar_match": calendar_match,
+                  "old_date": current_date,
+                  "new_date": new_date,
+                  "source": possible_blocks[0]["file"],
+                  "header": possible_blocks[0]["header"]
+              })
+
+          # ------------------------------------------------------------
+          # APPLICA MODIFICHE
+          # ------------------------------------------------------------
+
+          print()
+          print("========================================")
+          print("RISULTATO CONTROLLO")
+          print("========================================")
+
+          if not updates:
+              print("Nessuna variazione da applicare.")
+              sys.exit(0)
+
+          modified_ics = ics
+          changes_applied = 0
+
+          # Applichiamo dalla fine del file verso l'inizio, così gli
+          # indici dei blocchi restano validi.
+          updates.sort(
+              key=lambda item: item["calendar_match"]["match_start"],
+              reverse=True
+          )
+
+          for update in updates:
+              calendar_match = update["calendar_match"]
+              old_date = update["old_date"]
+              new_date = update["new_date"]
+
+              old_start = old_date.strftime("%Y%m%dT%H%M%S")
+              new_start = new_date.strftime("%Y%m%dT%H%M%S")
+
+              old_end = calendar_match["end_raw"]
+
+              if old_end:
+                  old_end_date = datetime.strptime(
+                      old_end,
+                      "%Y%m%dT%H%M%S"
+                  )
+
+                  duration = old_end_date - old_date
+                  new_end_date = new_date + duration
+                  new_end = new_end_date.strftime("%Y%m%dT%H%M%S")
+              else:
+                  new_end = None
+
+              old_block = calendar_match["block"]
+              new_block = old_block.replace(
+                  old_start,
+                  new_start,
+                  1
+              )
+
+              if old_end and new_end:
+                  new_block = new_block.replace(
+                      old_end,
+                      new_end,
+                      1
+                  )
+
+              if new_block == old_block:
+                  print(
+                      f"Nessuna modifica applicata a "
+                      f"{calendar_match['summary']}"
+                  )
+                  continue
+
+              start = calendar_match["match_start"]
+              end = calendar_match["match_end"]
+
+              modified_ics = (
+                  modified_ics[:start]
+                  + new_block
+                  + modified_ics[end:]
+              )
+
+              changes_applied += 1
+
+              print()
+              print("VARIAZIONE APPLICATA")
+              print(f"Partita: {calendar_match['summary']}")
+              print(
+                  "Prima:   "
+                  f"{old_date.strftime('%d/%m/%Y %H:%M')}"
+              )
+              print(
+                  "Dopo:    "
+                  f"{new_date.strftime('%d/%m/%Y %H:%M')}"
+              )
+              print(f"Fonte:   {update['source']}")
+
+          if changes_applied == 0:
+              print("Nessuna modifica effettiva.")
+              sys.exit(0)
+
+          # ------------------------------------------------------------
+          # VERIFICA FINALE
+          # ------------------------------------------------------------
+
+          final_events = re.findall(
+              r"BEGIN:VEVENT.*?END:VEVENT",
+              modified_ics,
+              re.S
+          )
+
+          print()
+          print("========================================")
+          print("VERIFICA FINALE")
+          print("========================================")
+          print(f"Eventi prima:  {len(events)}")
+          print(f"Eventi dopo:   {len(final_events)}")
+          print(f"Modifiche:     {changes_applied}")
+
+          if len(final_events) != 34:
+              print(
+                  "ERRORE: il numero degli eventi è cambiato. "
+                  "Annullamento per sicurezza."
+              )
+              sys.exit(1)
+
+          ICS_PATH.write_text(
+              modified_ics,
+              encoding="utf-8"
+          )
+
+          print("Calendario aggiornato correttamente.")
+          PY
+
+      - name: Controlla modifiche
+        id: changes
+        run: |
+          if git diff --quiet -- paganese.ics; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Nessuna modifica al calendario."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Il calendario è cambiato."
+          fi
+
+      - name: Salva aggiornamento su GitHub
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add paganese.ics
+          git commit -m "Aggiorna calendario Paganese"
+          git push
