@@ -17,84 +17,96 @@ jobs:
       - name: Installa strumenti
         run: |
           sudo apt-get update
-          sudo apt-get install -y curl grep sed
+          sudo apt-get install -y curl jq
 
-      - name: Individua API calendario LND
+      - name: Test API calendario ufficiale LND
         shell: bash
         run: |
           set -e
 
           echo "===================================="
-          echo "RICERCA API CALENDARIO LND"
+          echo "TEST API CALENDARIO UFFICIALE LND"
           echo "===================================="
 
-          URL="https://gare.lnd.it/competizione/dipartimento-interregionale?campionato=ID&giornata=2&girone=G&leg=first&stagione=2026"
+          API_URL="https://gare.lnd.it/api/as400/calendario/21/ID/G/2026/2027"
 
           echo ""
-          echo "Scarico la pagina ufficiale..."
+          echo "API controllata:"
+          echo "$API_URL"
 
-          curl -L \
-            --fail \
+          echo ""
+          echo "Scarico i dati..."
+
+          HTTP_CODE=$(curl \
+            -L \
             --silent \
             --show-error \
             --compressed \
             -A "Mozilla/5.0" \
-            "$URL" \
-            -o pagina.html
+            -w "%{http_code}" \
+            "$API_URL" \
+            -o calendario.json)
 
           echo ""
-          echo "Dimensione pagina:"
-          wc -c pagina.html
+          echo "Codice HTTP:"
+          echo "$HTTP_CODE"
+
+          echo ""
+          echo "Dimensione risposta:"
+          wc -c calendario.json
 
           echo ""
           echo "===================================="
-          echo "OCCORRENZE DI API/AS400"
+          echo "PRIMI 3000 CARATTERI DELLA RISPOSTA"
           echo "===================================="
 
-          grep -oE '.{0,250}api/as400.{0,400}' pagina.html \
+          head -c 3000 calendario.json
+          echo ""
+
+          echo ""
+          echo "===================================="
+          echo "VERIFICA JSON"
+          echo "===================================="
+
+          if jq empty calendario.json 2>/dev/null; then
+            echo "La risposta è un JSON valido."
+          else
+            echo "La risposta NON è un JSON valido."
+          fi
+
+          echo ""
+          echo "===================================="
+          echo "STRUTTURA JSON"
+          echo "===================================="
+
+          jq 'type' calendario.json 2>/dev/null || true
+
+          echo ""
+          echo "===================================="
+          echo "CHIAVI PRINCIPALI"
+          echo "===================================="
+
+          jq 'keys' calendario.json 2>/dev/null || true
+
+          echo ""
+          echo "===================================="
+          echo "RICERCA PAGANESE"
+          echo "===================================="
+
+          grep -ioE '.{0,250}paganese.{0,500}' calendario.json \
             | head -20 \
             || true
 
           echo ""
           echo "===================================="
-          echo "OCCORRENZE ORGANIZZAZIONE"
+          echo "RICERCA SASSARI"
           echo "===================================="
 
-          grep -oiE '.{0,200}organizzazione.{0,300}' pagina.html \
-            | head -30 \
+          grep -ioE '.{0,250}sassari.{0,500}' calendario.json \
+            | head -20 \
             || true
 
           echo ""
           echo "===================================="
-          echo "OCCORRENZE CAMPIONATO"
-          echo "===================================="
-
-          grep -oiE '.{0,200}campionato.{0,300}' pagina.html \
-            | head -30 \
-            || true
-
-          echo ""
-          echo "===================================="
-          echo "OCCORRENZE GIRONE"
-          echo "===================================="
-
-          grep -oiE '.{0,200}girone.{0,300}' pagina.html \
-            | head -30 \
-            || true
-
-          echo ""
-          echo "===================================="
-          echo "URL E STRINGHE INTERESSANTI"
-          echo "===================================="
-
-          grep -Eo \
-            'https?://[^"'\'' ]+|/api/[^"'\'' ]+' \
-            pagina.html \
-            | sort -u \
-            | head -100 \
-            || true
-
-          echo ""
-          echo "===================================="
-          echo "FINE RICERCA"
+          echo "FINE TEST"
           echo "===================================="
