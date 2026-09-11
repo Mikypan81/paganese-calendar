@@ -1,4 +1,4 @@
-name: Controllo Paganese
+name: Studio dati pagina LND
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 jobs:
-  controllo:
+  analisi-pagina:
     runs-on: ubuntu-latest
 
     steps:
@@ -17,102 +17,180 @@ jobs:
       - name: Installa strumenti
         run: |
           sudo apt-get update
-          sudo apt-get install -y curl grep sed
+          sudo apt-get install -y curl python3
 
-      - name: Cerca autenticazione API LND
-        shell: bash
+      - name: Scarica pagina ufficiale
         run: |
           set -e
 
+          URL="https://gare.lnd.it/competizione/dipartimento-interregionale?campionato=ID&giornata=2&girone=G&leg=first&stagione=2026"
+
           echo "===================================="
-          echo "RICERCA AUTENTICAZIONE API LND"
+          echo "SCARICO PAGINA UFFICIALE LND"
           echo "===================================="
 
-          PAGINA_URL="https://gare.lnd.it/competizione/dipartimento-interregionale?campionato=ID&giornata=2&girone=G&leg=first&stagione=2026"
+          echo "URL:"
+          echo "$URL"
 
-          JS_URL="https://gare.lnd.it/build/assets/app-93509732.js"
-
-          echo ""
-          echo "Scarico il JavaScript ufficiale..."
-
-          curl \
-            -L \
-            --fail \
-            --silent \
-            --show-error \
-            --compressed \
+          curl -L -sS \
             -A "Mozilla/5.0" \
-            "$JS_URL" \
-            -o app.js
+            "$URL" \
+            -o pagina.html
 
-          echo ""
-          echo "Dimensione JavaScript:"
-          wc -c app.js
+          echo
+          echo "Dimensione pagina:"
+          wc -c pagina.html
 
-          echo ""
+      - name: Cerca squadre e dati nel codice HTML
+        run: |
+          set -e
+
+          echo
           echo "===================================="
-          echo "RICERCA X-API-KEY"
-          echo "===================================="
-
-          grep -oiE '.{0,250}x-api-key.{0,500}' app.js \
-            | head -30 \
-            || true
-
-          echo ""
-          echo "===================================="
-          echo "RICERCA API_KEY"
+          echo "RICERCA PAGANESE E SASSARI"
           echo "===================================="
 
-          grep -oiE '.{0,250}api[_-]?key.{0,500}' app.js \
-            | head -30 \
-            || true
+          echo
+          echo "--- OCCORRENZE PAGANESE ---"
+          grep -oi -C 8 "paganese" pagina.html | head -200 || true
 
-          echo ""
-          echo "===================================="
-          echo "RICERCA APIKEY"
-          echo "===================================="
+          echo
+          echo "--- OCCORRENZE SASSARI ---"
+          grep -oi -C 8 "sassari" pagina.html | head -200 || true
 
-          grep -oiE '.{0,250}apikey.{0,500}' app.js \
-            | head -30 \
-            || true
+          echo
+          echo "--- OCCORRENZE LATTE DOLCE ---"
+          grep -oi -C 8 "latte dolce" pagina.html | head -200 || true
 
-          echo ""
-          echo "===================================="
-          echo "RICERCA AUTHORIZATION"
-          echo "===================================="
+          echo
+          echo "--- OCCORRENZE MATCHES ---"
+          grep -oi -C 5 "matches" pagina.html | head -100 || true
 
-          grep -oiE '.{0,250}authorization.{0,500}' app.js \
-            | head -30 \
-            || true
+          echo
+          echo "--- OCCORRENZE MATCHDAY ---"
+          grep -oi -C 5 "matchday" pagina.html | head -100 || true
 
-          echo ""
-          echo "===================================="
-          echo "RICERCA ENDPOINT AS400"
-          echo "===================================="
+      - name: Analizza script JSON incorporati
+        run: |
+          set -e
 
-          grep -oiE '.{0,300}as400.{0,700}' app.js \
-            | head -30 \
-            || true
-
-          echo ""
+          echo
           echo "===================================="
-          echo "RICERCA ENDPOINT CALENDARIO"
+          echo "ANALISI SCRIPT JSON INCORPORATI"
           echo "===================================="
 
-          grep -oiE '.{0,300}calendario.{0,700}' app.js \
-            | head -30 \
-            || true
+          python3 <<'PY'
+          import re
+          import html
+          import json
 
-          echo ""
-          echo "===================================="
-          echo "RICERCA CONFIGURAZIONI"
-          echo "===================================="
+          with open("pagina.html", "r", encoding="utf-8", errors="replace") as f:
+              pagina = f.read()
 
-          grep -oiE '.{0,250}(config|token|secret|header|bearer).{0,500}' app.js \
-            | head -50 \
-            || true
+          print("Numero caratteri HTML:", len(pagina))
 
-          echo ""
+          # Cerca tutti i blocchi script presenti nella pagina
+          scripts = re.findall(
+              r"<script\b[^>]*>(.*?)</script>",
+              pagina,
+              flags=re.IGNORECASE | re.DOTALL
+          )
+
+          print("Script trovati:", len(scripts))
+
+          parole = [
+              "paganese",
+              "sassari",
+              "latte dolce",
+              "matchday",
+              "matches",
+              "home",
+              "away",
+              "startDate"
+          ]
+
+          trovati = 0
+
+          for indice, contenuto in enumerate(scripts, start=1):
+              testo = html.unescape(contenuto)
+              testo = testo.replace("\\/", "/")
+
+              presenti = [
+                  parola for parola in parole
+                  if parola.lower() in testo.lower()
+              ]
+
+              if not presenti:
+                  continue
+
+              trovati += 1
+
+              print()
+              print("------------------------------------")
+              print("SCRIPT NUMERO:", indice)
+              print("Parole trovate:", ", ".join(presenti))
+              print("Dimensione:", len(testo))
+
+              # Prova a interpretare il contenuto come JSON
+              try:
+                  dati = json.loads(testo)
+                  print("JSON valido: SI")
+                  print("Tipo principale:", type(dati).__name__)
+
+                  testo_json = json.dumps(
+                      dati,
+                      ensure_ascii=False,
+                      indent=2
+                  )
+
+                  righe = testo_json.splitlines()
+
+                  for numero_riga, riga in enumerate(righe, start=1):
+                      if any(
+                          parola.lower() in riga.lower()
+                          for parola in parole
+                      ):
+                          inizio = max(0, numero_riga - 4)
+                          fine = min(len(righe), numero_riga + 5)
+
+                          print()
+                          print(
+                              f"Contesto JSON righe "
+                              f"{inizio + 1}-{fine}:"
+                          )
+
+                          for r in righe[inizio:fine]:
+                              print(r)
+
+              except Exception as errore:
+                  print("JSON valido: NO")
+                  print("Motivo:", str(errore)[:200])
+
+                  # Mostra comunque il contesto testuale
+                  testo_lower = testo.lower()
+
+                  for parola in parole:
+                      posizione = testo_lower.find(parola.lower())
+
+                      if posizione == -1:
+                          continue
+
+                      inizio = max(0, posizione - 300)
+                      fine = min(len(testo), posizione + 700)
+
+                      print()
+                      print("Contesto per:", parola)
+                      print(testo[inizio:fine])
+
+          print()
+          print("====================================")
+          print("SCRIPT CON DATI INTERESSANTI:", trovati)
+          print("====================================")
+          PY
+
+      - name: Mostra fine analisi
+        run: |
+          echo
           echo "===================================="
-          echo "FINE RICERCA"
+          echo "FINE ANALISI"
           echo "===================================="
