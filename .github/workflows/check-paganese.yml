@@ -70,246 +70,209 @@ jobs:
           echo "--- OCCORRENZE MATCHDAY ---"
           grep -oi -C 5 "matchday" pagina.html | head -100 || true
 
-      - name: Analizza script JSON incorporati
+      - name: Estrai e stampa tutte le partite
         run: |
           set -e
 
           echo
           echo "========================================"
-          echo "ANALISI COMPLETA JSON INCORPORATI"
+          echo "ESTRAZIONE DI TUTTE LE PARTITE"
           echo "========================================"
 
           python3 - <<'PY'
-          import re
+          import html
           import json
+          import re
           from pathlib import Path
 
-          html = Path("pagina.html").read_text(
+          pagina = Path("pagina.html").read_text(
               encoding="utf-8",
               errors="ignore"
           )
 
-          print(f"Numero caratteri HTML: {len(html)}")
+          print(f"Numero caratteri HTML: {len(pagina)}")
 
-          # Cerca tutti i blocchi script presenti nella pagina.
-          # Non ci limitiamo agli script con type=application/json,
-          # perché il sito potrebbe incorporare i dati in uno script
-          # normale, come quello iniziale della pagina.
           scripts = re.findall(
               r"<script\b[^>]*>(.*?)</script>",
-              html,
+              pagina,
               flags=re.IGNORECASE | re.DOTALL
           )
 
           print(f"Script trovati: {len(scripts)}")
 
-          def walk(value, path="root", depth=0):
-              if depth > 8:
-                  return
+          def pulisci_testo(testo):
+              testo = html.unescape(testo)
+              testo = testo.replace("\\/", "/")
+              testo = testo.replace("\\u0022", '"')
+              testo = testo.replace("\\u0027", "'")
+              return testo
 
-              if isinstance(value, dict):
-                  for key, child in value.items():
-                      key_path = f"{path}.{key}"
-                      key_lower = str(key).lower()
+          def cerca_matches(valore, percorso="root", profondita=0):
+              """
+              Cerca ricorsivamente tutte le chiavi chiamate matches.
+              """
+              risultati = []
 
-                      if any(word in key_lower for word in [
-                          "match",
-                          "game",
-                          "home",
-                          "away",
-                          "date",
-                          "score",
-                          "team",
-                          "playday",
-                          "calendar"
-                      ]):
-                          print()
-                          print(f"CHIAVE INTERESSANTE: {key_path}")
+              if profondita > 12:
+                  return risultati
 
-                          if isinstance(child, (dict, list)):
-                              try:
-                                  preview = json.dumps(
-                                      child,
-                                      ensure_ascii=False,
-                                      indent=2
-                                  )
+              if isinstance(valore, dict):
+                  for chiave, contenuto in valore.items():
+                      nuovo_percorso = f"{percorso}.{chiave}"
 
-                                  print(preview[:5000])
+                      if str(chiave).lower() == "matches":
+                          risultati.append(
+                              (nuovo_percorso, contenuto)
+                          )
 
-                              except Exception:
-                                  print(repr(child)[:5000])
-                          else:
-                              print(repr(child)[:1000])
-
-                      walk(child, key_path, depth + 1)
-
-              elif isinstance(value, list):
-                  for index, child in enumerate(value[:100]):
-                      walk(
-                          child,
-                          f"{path}[{index}]",
-                          depth + 1
+                      risultati.extend(
+                          cerca_matches(
+                              contenuto,
+                              nuovo_percorso,
+                              profondita + 1
+                          )
                       )
 
-          parole = [
-              "paganese",
-              "sassari",
-              "latte dolce",
-              "matchday",
-              "matches",
-              "match",
-              "home",
-              "away",
-              "startdate",
-              "date",
-              "score",
-              "team",
-              "calendar",
-              "playday"
-          ]
+              elif isinstance(valore, list):
+                  for indice, contenuto in enumerate(valore):
+                      risultati.extend(
+                          cerca_matches(
+                              contenuto,
+                              f"{percorso}[{indice}]",
+                              profondita + 1
+                          )
+                      )
 
-          script_interessanti = 0
+              return risultati
 
-          for indice, contenuto in enumerate(scripts, start=1):
-              testo = contenuto
+          def estrai_json_da_script(testo):
+              """
+              Prova a estrarre un oggetto JSON completo
+              anche quando lo script contiene altro codice.
+              """
+              testo = pulisci_testo(testo)
 
-              # Decodifica alcune forme usate nell'HTML.
-              testo = testo.replace("\\/", "/")
-              testo = testo.replace("&quot;", '"')
-              testo = testo.replace("&#39;", "'")
-              testo = testo.replace("&amp;", "&")
+              decoder = json.JSONDecoder()
 
-              presenti = [
-                  parola
-                  for parola in parole
-                  if parola.lower() in testo.lower()
+              posizioni = [
+                  posizione
+                  for posizione, carattere in enumerate(testo)
+                  if carattere in "{["
               ]
 
-              if not presenti:
-                  continue
-
-              script_interessanti += 1
-
-              print()
-              print("----------------------------------------")
-              print(f"SCRIPT NUMERO {indice}")
-              print("----------------------------------------")
-              print("Parole trovate:", ", ".join(presenti))
-              print("Dimensione script:", len(testo))
-
-              # Prima prova: script JSON puro.
-              try:
-                  data = json.loads(testo)
-
-                  print("JSON valido: SI")
-                  print("Tipo principale:", type(data).__name__)
-
-                  if isinstance(data, dict):
-                      print("Chiavi principali:")
-                      for key in data.keys():
-                          print(f" - {key}")
-
-                  print()
-                  print("Ricerca ricorsiva delle chiavi interessanti:")
-                  walk(data)
-
-                  continue
-
-              except Exception as errore:
-                  print("JSON puro: NO")
-                  print("Motivo:", str(errore)[:200])
-
-              # Seconda prova: cerca un oggetto JSON dentro lo script.
-              # Questo serve per script del tipo:
-              # window.__INITIAL_STATE__ = {...};
-              # oppure:
-              # const data = {...};
-              oggetti_trovati = []
-
-              for apertura in ["{", "["]:
-                  posizione = testo.find(apertura)
-
-                  if posizione != -1:
-                      oggetti_trovati.append(
-                          testo[posizione:]
-                      )
-
-              json_decodificato = False
-
-              for candidato in oggetti_trovati:
-                  candidato = candidato.strip()
-
-                  # Rimuove eventuali chiusure JavaScript comuni.
-                  candidato = re.sub(
-                      r";\s*$",
-                      "",
-                      candidato
-                  )
+              for posizione in posizioni:
+                  candidato = testo[posizione:].strip()
 
                   try:
-                      decoder = json.JSONDecoder()
-                      data, posizione_finale = decoder.raw_decode(
+                      oggetto, caratteri_letti = decoder.raw_decode(
                           candidato
                       )
 
-                      print("JSON incorporato trovato: SI")
-                      print(
-                          "Caratteri JSON analizzati:",
-                          posizione_finale
-                      )
-
-                      if isinstance(data, dict):
-                          print("Chiavi principali:")
-                          for key in data.keys():
-                              print(f" - {key}")
-
-                      print()
-                      print(
-                          "Ricerca ricorsiva delle chiavi interessanti:"
-                      )
-
-                      walk(data)
-
-                      json_decodificato = True
-                      break
+                      return oggetto
 
                   except Exception:
                       continue
 
-              if not json_decodificato:
-                  print("JSON incorporato trovato: NO")
+              return None
 
-                  # Mostra il contesto delle parole più importanti.
-                  testo_lower = testo.lower()
+          json_trovati = []
 
-                  for parola in [
-                      "paganese",
-                      "sassari",
-                      "matches",
-                      "matchday",
-                      "api/as400",
-                      "api/v1"
-                  ]:
-                      posizione = testo_lower.find(parola.lower())
+          for numero_script, contenuto_script in enumerate(
+              scripts,
+              start=1
+          ):
+              testo = pulisci_testo(contenuto_script)
 
-                      if posizione == -1:
-                          continue
+              parole_interessanti = [
+                  "matches",
+                  "paganese",
+                  "sassari",
+                  "latte dolce",
+                  "matchday",
+                  "calendar"
+              ]
 
-                      inizio = max(0, posizione - 500)
-                      fine = min(len(testo), posizione + 1500)
+              if not any(
+                  parola.lower() in testo.lower()
+                  for parola in parole_interessanti
+              ):
+                  continue
 
-                      print()
+              print()
+              print("----------------------------------------")
+              print(f"ANALIZZO SCRIPT NUMERO {numero_script}")
+              print("----------------------------------------")
+
+              oggetto = estrai_json_da_script(testo)
+
+              if oggetto is None:
+                  print("Nessun JSON estraibile in questo script.")
+                  continue
+
+              json_trovati.append(oggetto)
+
+              risultati_matches = cerca_matches(oggetto)
+
+              if not risultati_matches:
+                  print("Nessuna chiave 'matches' trovata.")
+                  continue
+
+              for percorso, matches in risultati_matches:
+                  print()
+                  print("========================================")
+                  print("ARRAY PARTITE TROVATO")
+                  print("Percorso:", percorso)
+                  print("========================================")
+
+                  if not isinstance(matches, list):
+                      print("Il valore trovato non è una lista.")
+                      print(repr(matches)[:5000])
+                      continue
+
+                  print("Numero partite:", len(matches))
+                  print()
+
+                  for indice, partita in enumerate(matches, start=1):
                       print("----------------------------------------")
-                      print(f"CONTESTO PAROLA: {parola}")
+                      print(f"PARTITA {indice}")
                       print("----------------------------------------")
-                      print(testo[inizio:fine])
+
+                      if isinstance(partita, dict):
+                          data = partita.get("date")
+                          casa = partita.get("home")
+                          ospite = partita.get("away")
+                          gol_casa = partita.get("homeGoals")
+                          gol_ospite = partita.get("awayGoals")
+
+                          print("Data:", data)
+                          print("Casa:", casa)
+                          print("Ospite:", ospite)
+                          print("Gol casa:", gol_casa)
+                          print("Gol ospite:", gol_ospite)
+
+                          print()
+                          print("Dati completi della partita:")
+
+                          print(
+                              json.dumps(
+                                  partita,
+                                  ensure_ascii=False,
+                                  indent=2
+                              )
+                          )
+
+                      else:
+                          print(
+                              json.dumps(
+                                  partita,
+                                  ensure_ascii=False,
+                                  indent=2
+                              )
+                          )
 
           print()
           print("========================================")
-          print(
-              "SCRIPT CON DATI INTERESSANTI:",
-              script_interessanti
-          )
+          print("FINE ESTRAZIONE PARTITE")
           print("========================================")
           PY
 
