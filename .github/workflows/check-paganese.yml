@@ -21,13 +21,13 @@ jobs:
         with:
           python-version: "3.x"
 
-      - name: Estrai calendario LND
+      - name: Estrai calendario LND e genera ICS
         run: |
           cat > estrai_calendario.py <<'PYTHON'
           import json
           import re
           import urllib.request
-          from datetime import datetime
+          from datetime import datetime, timedelta
           from pathlib import Path
 
           BASE_URL = (
@@ -59,19 +59,15 @@ jobs:
                   richiesta,
                   timeout=30
               ) as risposta:
-                  return risposta.read().decode("utf-8", errors="replace")
+                  return risposta.read().decode(
+                      "utf-8",
+                      errors="replace"
+                  )
 
           def estrai_partite(html):
-              """
-              Cerca nei tag script il JSON contenente:
-              root.props.matches
-              """
-
               pattern = re.compile(
                   r'"matches"\s*:\s*(\[[\s\S]*?\])\s*[,}]'
               )
-
-              risultati = []
 
               for script in re.findall(
                   r"<script[^>]*>([\s\S]*?)</script>",
@@ -86,19 +82,16 @@ jobs:
                   if not match:
                       continue
 
-                  testo_json = match.group(1)
-
                   try:
-                      partite = json.loads(testo_json)
+                      partite = json.loads(match.group(1))
 
                       if isinstance(partite, list):
-                          risultati = partite
-                          break
+                          return partite
 
                   except json.JSONDecodeError:
                       continue
 
-              return risultati
+              return []
 
           def valore(partita, *chiavi):
               for chiave in chiavi:
@@ -115,11 +108,6 @@ jobs:
               )
 
           def chiave_univoca(partita):
-              """
-              L'ID LND è il metodo più sicuro.
-              Come fallback usiamo data + squadre.
-              """
-
               identificativo = valore(
                   partita,
                   "id",
@@ -142,27 +130,8 @@ jobs:
                   "dateTime",
               )
 
-              casa = valore(
-                  partita,
-                  "home",
-                  "home_team",
-                  "homeTeam",
-                  "squadra_casa",
-                  "squadraCasa",
-                  "team_home",
-                  "teamHome",
-              )
-
-              trasferta = valore(
-                  partita,
-                  "away",
-                  "away_team",
-                  "awayTeam",
-                  "squadra_trasferta",
-                  "squadraTrasferta",
-                  "team_away",
-                  "teamAway",
-              )
+              casa = nome_squadra(partita, "casa")
+              trasferta = nome_squadra(partita, "trasferta")
 
               return (
                   f"fallback:"
@@ -170,6 +139,26 @@ jobs:
                   f"{normalizza(casa)}|"
                   f"{normalizza(trasferta)}"
               )
+
+          def estrai_nome(valore_originale):
+              if isinstance(valore_originale, str):
+                  return valore_originale
+
+              if isinstance(valore_originale, dict):
+                  for chiave in (
+                      "name",
+                      "nome",
+                      "team_name",
+                      "teamName",
+                      "club_name",
+                      "clubName",
+                      "denominazione",
+                      "description",
+                  ):
+                      if valore_originale.get(chiave):
+                          return str(valore_originale[chiave])
+
+              return str(valore_originale or "")
 
           def nome_squadra(partita, lato):
               if lato == "casa":
@@ -181,6 +170,8 @@ jobs:
                       "squadraCasa",
                       "team_home",
                       "teamHome",
+                      "local",
+                      "localTeam",
                   )
               else:
                   chiavi = (
@@ -191,20 +182,14 @@ jobs:
                       "squadraTrasferta",
                       "team_away",
                       "teamAway",
+                      "visitor",
+                      "visitorTeam",
+                      "ospite",
                   )
 
               risultato = valore(partita, *chiavi)
 
-              if isinstance(risultato, dict):
-                  return (
-                      risultato.get("name")
-                      or risultato.get("nome")
-                      or risultato.get("team_name")
-                      or risultato.get("teamName")
-                      or ""
-                  )
-
-              return str(risultato or "")
+              return estrai_nome(risultato)
 
           def partita_paganese(partita):
               casa = normalizza(nome_squadra(partita, "casa"))
@@ -224,15 +209,178 @@ jobs:
                   "matchDate",
                   "datetime",
                   "dateTime",
+                  "startDate",
+                  "start_date",
               )
 
-              return str(data or "")
+              if isinstance(data, dict):
+                  data = (
+                      data.get("date")
+                      or data.get("value")
+                      or data.get("datetime")
+                      or data.get("dateTime")
+                      or ""
+                  )
+
+              return str(data or "").strip()
+
+          def id_partita(partita):
+              return str(
+                  valore(
+                      partita,
+                      "id",
+                      "match_id",
+                      "matchId",
+                      "gara_id",
+                      "garaId",
+                  )
+                  or ""
+              )
+
+          def parse_data(data):
+              """
+              Converte i principali formati restituiti dal sito
+              in una data Python.
+              """
+
+              testo = str(data or "").strip()
+
+              if not testo:
+                  return None
+
+              # ISO completo: 2026-09-06T15:00:00
+              match = re.search(
+                  r"(20\d{2})-(\d{2})-(\d{2})",
+                  testo
+              )
+
+              if match:
+                  anno, mese, giorno = map(
+                      int,
+                      match.groups()
+                  )
+
+                  return datetime(
+                      anno,
+                      mese,
+                      giorno
+                  )
+
+              # Formato italiano: 06/09/2026
+              match = re.search(
+                  r"(\d{2})/(\d{2})/(20\d{2})",
+                  testo
+              )
+
+              if match:
+                  giorno, mese, anno = map(
+                      int,
+                      match.groups()
+                  )
+
+                  return datetime(
+                      anno,
+                      mese,
+                      giorno
+                  )
+
+              return None
+
+          def escape_ics(testo):
+              """
+              Escape obbligatorio per il formato ICS.
+              """
+
+              testo = str(testo or "")
+
+              return (
+                  testo
+                  .replace("\\", "\\\\")
+                  .replace(";", "\\;")
+                  .replace(",", "\\,")
+                  .replace("\r\n", "\\n")
+                  .replace("\n", "\\n")
+                  .replace("\r", "\\n")
+              )
+
+          def crea_ics(partite):
+              righe = [
+                  "BEGIN:VCALENDAR",
+                  "VERSION:2.0",
+                  "PRODID:-//Paganese Calendar//IT",
+                  "CALSCALE:GREGORIAN",
+                  "METHOD:PUBLISH",
+                  "X-WR-CALNAME:Paganese Calcio 1926",
+                  "X-WR-TIMEZONE:Europe/Rome",
+              ]
+
+              generati = 0
+
+              for partita in partite:
+                  data_originale = data_partita(partita)
+                  data = parse_data(data_originale)
+
+                  if data is None:
+                      print(
+                          "ATTENZIONE: data non riconosciuta per "
+                          f"{partita}"
+                      )
+                      continue
+
+                  casa = nome_squadra(partita, "casa")
+                  trasferta = nome_squadra(partita, "trasferta")
+                  identificativo = id_partita(partita)
+
+                  if not casa:
+                      casa = "Squadra di casa"
+
+                  if not trasferta:
+                      trasferta = "Squadra ospite"
+
+                  if identificativo:
+                      uid = (
+                          f"{identificativo}"
+                          "@paganese-calendar.github"
+                      )
+                  else:
+                      uid = (
+                          f"{data.strftime('%Y%m%d')}-"
+                          f"{normalizza(casa)}-"
+                          f"{normalizza(trasferta)}"
+                          "@paganese-calendar.github"
+                      )
+
+                  giorno_inizio = data.strftime("%Y%m%d")
+                  giorno_fine = (
+                      data + timedelta(days=1)
+                  ).strftime("%Y%m%d")
+
+                  descrizione = (
+                      f"{casa} - {trasferta}\\n"
+                      f"Calendario Paganese Calcio 1926"
+                  )
+
+                  righe.extend([
+                      "BEGIN:VEVENT",
+                      f"UID:{escape_ics(uid)}",
+                      f"DTSTAMP:{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}",
+                      f"DTSTART;VALUE=DATE:{giorno_inizio}",
+                      f"DTEND;VALUE=DATE:{giorno_fine}",
+                      f"SUMMARY:{escape_ics(casa + ' - ' + trasferta)}",
+                      f"DESCRIPTION:{escape_ics(descrizione)}",
+                      "STATUS:CONFIRMED",
+                      "TRANSP:TRANSPARENT",
+                      "END:VEVENT",
+                  ])
+
+                  generati += 1
+
+              righe.append("END:VCALENDAR")
+
+              return "\r\n".join(righe) + "\r\n", generati
 
           tutte_le_partite = {}
-          statistiche = []
 
-          # L'andata ha 17 giornate.
-          # Il ritorno ha altre 17 giornate.
           configurazioni = [
               ("andata", "first"),
               ("ritorno", "second"),
@@ -241,7 +389,10 @@ jobs:
           for nome_leg, valore_leg in configurazioni:
               print("")
               print("=" * 70)
-              print(f"LETTURA {nome_leg.upper()} - parametro leg={valore_leg}")
+              print(
+                  f"LETTURA {nome_leg.upper()} "
+                  f"- parametro leg={valore_leg}"
+              )
               print("=" * 70)
 
               for giornata in range(1, 18):
@@ -272,16 +423,9 @@ jobs:
 
                           partita["_leg"] = nome_leg
                           partita["_giornata_pagina"] = giornata
+
                           tutte_le_partite[chiave] = partita
                           nuove += 1
-
-                      statistiche.append({
-                          "leg": nome_leg,
-                          "giornata": giornata,
-                          "partite": len(partite),
-                          "nuove": nuove,
-                          "duplicate": duplicate,
-                      })
 
                       print(
                           f"  Nuove: {nuove} | "
@@ -302,53 +446,41 @@ jobs:
               if partita_paganese(partita)
           ]
 
-          def chiave_ordinamento(partita):
-              return (
+          partite_paganese.sort(
+              key=lambda partita: (
                   data_partita(partita),
-                  str(
-                      valore(
-                          partita,
-                          "id",
-                          "match_id",
-                          "matchId",
-                      )
-                  ),
+                  id_partita(partita),
               )
-
-          partite_paganese.sort(key=chiave_ordinamento)
+          )
 
           print("")
           print("=" * 70)
           print("RISULTATO FINALE")
           print("=" * 70)
-          print(f"Partite uniche raccolte: {len(partite_uniche)}")
-          print(f"Partite Paganese: {len(partite_paganese)}")
+          print(
+              f"Partite uniche raccolte: "
+              f"{len(partite_uniche)}"
+          )
+          print(
+              f"Partite Paganese: "
+              f"{len(partite_paganese)}"
+          )
           print("")
 
-          for indice, partita in enumerate(partite_paganese, start=1):
-              identificativo = valore(
-                  partita,
-                  "id",
-                  "match_id",
-                  "matchId",
-                  "gara_id",
-                  "garaId",
-              )
-
-              casa = nome_squadra(partita, "casa")
-              trasferta = nome_squadra(partita, "trasferta")
-              data = data_partita(partita)
-
+          for indice, partita in enumerate(
+              partite_paganese,
+              start=1
+          ):
               print(
                   f"{indice:02d}. "
-                  f"{data} | "
-                  f"{casa} - {trasferta} | "
-                  f"ID: {identificativo} | "
+                  f"{data_partita(partita)} | "
+                  f"{nome_squadra(partita, 'casa')} - "
+                  f"{nome_squadra(partita, 'trasferta')} | "
+                  f"ID: {id_partita(partita)} | "
                   f"Pagina: {partita.get('_leg')} "
                   f"{partita.get('_giornata_pagina')}"
               )
 
-          # Salvataggio del JSON completo per eventuali controlli futuri.
           Path("partite_lnd.json").write_text(
               json.dumps(
                   partite_uniche,
@@ -367,36 +499,67 @@ jobs:
               encoding="utf-8",
           )
 
+          calendario_ics, eventi_generati = crea_ics(
+              partite_paganese
+          )
+
+          Path("paganese.ics").write_text(
+              calendario_ics,
+              encoding="utf-8",
+              newline="",
+          )
+
+          print("")
+          print("=" * 70)
+          print("GENERAZIONE CALENDARIO ICS")
+          print("=" * 70)
+          print(
+              f"Eventi ICS generati: {eventi_generati}"
+          )
+
           if len(partite_paganese) != 34:
               print("")
               print(
                   "ATTENZIONE: il numero di partite Paganese "
                   f"è {len(partite_paganese)}, non 34."
               )
+          elif eventi_generati != 34:
+              print("")
               print(
-                  "Controllare il parametro utilizzato dal sito "
-                  "per il ritorno."
+                  "ATTENZIONE: sono state trovate 34 partite, "
+                  f"ma generati soltanto {eventi_generati} eventi ICS."
               )
           else:
               print("")
               print(
-                  "OK: trovate esattamente 34 partite Paganese."
+                  "OK: trovate 34 partite Paganese "
+                  "e generati 34 eventi ICS."
               )
           PYTHON
 
           python estrai_calendario.py
 
-      - name: Mostra file generati
+      - name: Controlla file generati
         run: |
           echo "File generati:"
-          ls -lah partite_lnd.json partite_paganese.json
+          ls -lah \
+            partite_lnd.json \
+            partite_paganese.json \
+            paganese.ics
+
+          echo ""
+          echo "Prime righe del calendario ICS:"
+          head -n 20 paganese.ics
 
       - name: Commit dei risultati
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add partite_lnd.json partite_paganese.json
+          git add \
+            partite_lnd.json \
+            partite_paganese.json \
+            paganese.ics
 
           if git diff --cached --quiet; then
             echo "Nessuna modifica da salvare."
