@@ -40,8 +40,6 @@ jobs:
               "&stagione=2026"
           )
 
-          SQUADRA = "Paganese"
-
           def scarica_pagina(url):
               richiesta = urllib.request.Request(
                   url,
@@ -107,42 +105,9 @@ jobs:
                   str(testo or "").strip().lower()
               )
 
-          def chiave_univoca(partita):
-              identificativo = valore(
-                  partita,
-                  "id",
-                  "match_id",
-                  "matchId",
-                  "gara_id",
-                  "garaId",
-              )
-
-              if identificativo:
-                  return f"id:{identificativo}"
-
-              data = valore(
-                  partita,
-                  "date",
-                  "data",
-                  "match_date",
-                  "matchDate",
-                  "datetime",
-                  "dateTime",
-              )
-
-              casa = nome_squadra(partita, "casa")
-              trasferta = nome_squadra(partita, "trasferta")
-
-              return (
-                  f"fallback:"
-                  f"{normalizza(data)}|"
-                  f"{normalizza(casa)}|"
-                  f"{normalizza(trasferta)}"
-              )
-
           def estrai_nome(valore_originale):
               if isinstance(valore_originale, str):
-                  return valore_originale
+                  return valore_originale.strip()
 
               if isinstance(valore_originale, dict):
                   for chiave in (
@@ -156,9 +121,11 @@ jobs:
                       "description",
                   ):
                       if valore_originale.get(chiave):
-                          return str(valore_originale[chiave])
+                          return str(
+                              valore_originale[chiave]
+                          ).strip()
 
-              return str(valore_originale or "")
+              return str(valore_originale or "").strip()
 
           def nome_squadra(partita, lato):
               if lato == "casa":
@@ -191,38 +158,77 @@ jobs:
 
               return estrai_nome(risultato)
 
+          def nome_leggibile(nome):
+              """
+              Trasforma i nomi maiuscoli provenienti da LND
+              in una forma più leggibile.
+              """
+
+              nome = re.sub(
+                  r"\s+",
+                  " ",
+                  str(nome or "").strip()
+              )
+
+              if not nome:
+                  return ""
+
+              parole = []
+
+              for parola in nome.split(" "):
+                  # Mantiene correttamente abbreviazioni come
+                  # A.S.D., C.O.S., SSD e simili.
+                  if re.fullmatch(
+                      r"(?:[A-Za-z]\.){2,}",
+                      parola
+                  ):
+                      parole.append(parola.upper())
+                      continue
+
+                  if parola.upper() in {
+                      "SSD",
+                      "ASD",
+                      "SRL",
+                      "A.R.L.",
+                      "S.S.D.",
+                  }:
+                      parole.append(parola.upper())
+                      continue
+
+                  # Gestione di parole con apostrofo o trattino.
+                  parti = re.split(
+                      r"([\'\-])",
+                      parola.lower()
+                  )
+
+                  parola_formattata = ""
+
+                  for parte in parti:
+                      if parte in {"'", "-"}:
+                          parola_formattata += parte
+                      elif parte:
+                          parola_formattata += (
+                              parte[0].upper()
+                              + parte[1:]
+                          )
+
+                  parole.append(parola_formattata)
+
+              return " ".join(parole)
+
           def partita_paganese(partita):
-              casa = normalizza(nome_squadra(partita, "casa"))
-              trasferta = normalizza(nome_squadra(partita, "trasferta"))
+              casa = normalizza(
+                  nome_squadra(partita, "casa")
+              )
+
+              trasferta = normalizza(
+                  nome_squadra(partita, "trasferta")
+              )
 
               return (
                   "paganese" in casa
                   or "paganese" in trasferta
               )
-
-          def data_partita(partita):
-              data = valore(
-                  partita,
-                  "date",
-                  "data",
-                  "match_date",
-                  "matchDate",
-                  "datetime",
-                  "dateTime",
-                  "startDate",
-                  "start_date",
-              )
-
-              if isinstance(data, dict):
-                  data = (
-                      data.get("date")
-                      or data.get("value")
-                      or data.get("datetime")
-                      or data.get("dateTime")
-                      or ""
-                  )
-
-              return str(data or "").strip()
 
           def id_partita(partita):
               return str(
@@ -237,18 +243,219 @@ jobs:
                   or ""
               )
 
-          def parse_data(data):
+          def chiave_univoca(partita):
+              identificativo = id_partita(partita)
+
+              if identificativo:
+                  return f"id:{identificativo}"
+
+              casa = nome_squadra(partita, "casa")
+              trasferta = nome_squadra(partita, "trasferta")
+
+              data_ora = trova_data_ora(partita)
+
+              return (
+                  f"fallback:"
+                  f"{normalizza(data_ora)}|"
+                  f"{normalizza(casa)}|"
+                  f"{normalizza(trasferta)}"
+              )
+
+          def raccogli_stringhe(valore_originale, percorso=""):
               """
-              Converte i principali formati restituiti dal sito
-              in una data Python.
+              Cerca ricorsivamente tutte le stringhe presenti
+              nell'oggetto partita.
               """
 
-              testo = str(data or "").strip()
+              risultati = []
+
+              if isinstance(valore_originale, dict):
+                  for chiave, valore_corrente in valore_originale.items():
+                      nuovo_percorso = (
+                          f"{percorso}.{chiave}"
+                          if percorso
+                          else str(chiave)
+                      )
+
+                      risultati.extend(
+                          raccogli_stringhe(
+                              valore_corrente,
+                              nuovo_percorso
+                          )
+                      )
+
+              elif isinstance(valore_originale, list):
+                  for indice, elemento in enumerate(
+                      valore_originale
+                  ):
+                      risultati.extend(
+                          raccogli_stringhe(
+                              elemento,
+                              f"{percorso}[{indice}]"
+                          )
+                      )
+
+              elif isinstance(valore_originale, str):
+                  risultati.append(
+                      (percorso, valore_originale.strip())
+                  )
+
+              return risultati
+
+          def trova_data_ora(partita):
+              """
+              Cerca prima i campi che sembrano contenere data,
+              orario, inizio o programmazione.
+
+              Supporta:
+              - 2026-09-06T15:00:00
+              - 2026-09-06 15:00
+              - 06/09/2026 15:00
+              - data separata da un campo time/orario
+              """
+
+              stringhe = raccogli_stringhe(partita)
+
+              prioritarie = []
+              generiche = []
+
+              for percorso, testo in stringhe:
+                  percorso_lower = percorso.lower()
+
+                  if any(
+                      parola in percorso_lower
+                      for parola in (
+                          "date",
+                          "data",
+                          "time",
+                          "ora",
+                          "start",
+                          "inizio",
+                          "schedule",
+                          "programm",
+                          "datetime",
+                      )
+                  ):
+                      prioritarie.append(testo)
+
+                  generiche.append(testo)
+
+              candidati = prioritarie + generiche
+
+              # Prima cerchiamo una stringa che contenga
+              # direttamente sia la data sia l'orario.
+              for testo in candidati:
+                  if re.search(
+                      r"20\d{2}-\d{2}-\d{2}"
+                      r"[T\s]+\d{1,2}:\d{2}",
+                      testo
+                  ):
+                      return testo
+
+                  if re.search(
+                      r"\d{2}/\d{2}/20\d{2}"
+                      r"\s+\d{1,2}:\d{2}",
+                      testo
+                  ):
+                      return testo
+
+              # Se data e orario sono separati, li ricostruiamo.
+              data_trovata = None
+              ora_trovata = None
+
+              for testo in candidati:
+                  if data_trovata is None:
+                      if re.search(
+                          r"20\d{2}-\d{2}-\d{2}",
+                          testo
+                      ):
+                          data_trovata = testo
+
+                      elif re.search(
+                          r"\d{2}/\d{2}/20\d{2}",
+                          testo
+                      ):
+                          data_trovata = testo
+
+                  if ora_trovata is None:
+                      match_ora = re.search(
+                          r"\b([01]?\d|2[0-3]):[0-5]\d\b",
+                          testo
+                      )
+
+                      if match_ora:
+                          ora_trovata = match_ora.group(0)
+
+              if data_trovata and ora_trovata:
+                  return (
+                      f"{data_trovata} "
+                      f"{ora_trovata}"
+                  )
+
+              if data_trovata:
+                  return data_trovata
+
+              return ""
+
+          def parse_data_ora(testo):
+              """
+              Restituisce una datetime.
+              Se l'orario non esiste, restituisce la data
+              a mezzanotte e il flag False.
+              """
+
+              testo = str(testo or "").strip()
 
               if not testo:
-                  return None
+                  return None, False
 
-              # ISO completo: 2026-09-06T15:00:00
+              # ISO con orario:
+              # 2026-09-06T15:00:00
+              # 2026-09-06 15:00
+              match = re.search(
+                  r"(20\d{2})-(\d{2})-(\d{2})"
+                  r"[T\s]+"
+                  r"(\d{1,2}):(\d{2})",
+                  testo
+              )
+
+              if match:
+                  anno, mese, giorno, ora, minuti = map(
+                      int,
+                      match.groups()
+                  )
+
+                  return datetime(
+                      anno,
+                      mese,
+                      giorno,
+                      ora,
+                      minuti,
+                  ), True
+
+              # Data italiana con orario:
+              # 06/09/2026 15:00
+              match = re.search(
+                  r"(\d{2})/(\d{2})/(20\d{2})"
+                  r"\s+(\d{1,2}):(\d{2})",
+                  testo
+              )
+
+              if match:
+                  giorno, mese, anno, ora, minuti = map(
+                      int,
+                      match.groups()
+                  )
+
+                  return datetime(
+                      anno,
+                      mese,
+                      giorno,
+                      ora,
+                      minuti,
+                  ), True
+
+              # Data ISO senza orario.
               match = re.search(
                   r"(20\d{2})-(\d{2})-(\d{2})",
                   testo
@@ -263,10 +470,10 @@ jobs:
                   return datetime(
                       anno,
                       mese,
-                      giorno
-                  )
+                      giorno,
+                  ), False
 
-              # Formato italiano: 06/09/2026
+              # Data italiana senza orario.
               match = re.search(
                   r"(\d{2})/(\d{2})/(20\d{2})",
                   testo
@@ -281,16 +488,12 @@ jobs:
                   return datetime(
                       anno,
                       mese,
-                      giorno
-                  )
+                      giorno,
+                  ), False
 
-              return None
+              return None, False
 
           def escape_ics(testo):
-              """
-              Escape obbligatorio per il formato ICS.
-              """
-
               testo = str(testo or "")
 
               return (
@@ -315,21 +518,41 @@ jobs:
               ]
 
               generati = 0
+              con_orario = 0
+              senza_orario = 0
 
               for partita in partite:
-                  data_originale = data_partita(partita)
-                  data = parse_data(data_originale)
+                  testo_data_ora = trova_data_ora(partita)
+                  data_ora, ha_orario = parse_data_ora(
+                      testo_data_ora
+                  )
 
-                  if data is None:
+                  casa_originale = nome_squadra(
+                      partita,
+                      "casa"
+                  )
+
+                  trasferta_originale = nome_squadra(
+                      partita,
+                      "trasferta"
+                  )
+
+                  casa = nome_leggibile(
+                      casa_originale
+                  )
+
+                  trasferta = nome_leggibile(
+                      trasferta_originale
+                  )
+
+                  identificativo = id_partita(partita)
+
+                  if data_ora is None:
                       print(
-                          "ATTENZIONE: data non riconosciuta per "
-                          f"{partita}"
+                          "ATTENZIONE: data non riconosciuta "
+                          f"per ID {identificativo}"
                       )
                       continue
-
-                  casa = nome_squadra(partita, "casa")
-                  trasferta = nome_squadra(partita, "trasferta")
-                  identificativo = id_partita(partita)
 
                   if not casa:
                       casa = "Squadra di casa"
@@ -344,29 +567,66 @@ jobs:
                       )
                   else:
                       uid = (
-                          f"{data.strftime('%Y%m%d')}-"
+                          f"{data_ora.strftime('%Y%m%d')}-"
                           f"{normalizza(casa)}-"
                           f"{normalizza(trasferta)}"
                           "@paganese-calendar.github"
                       )
 
-                  giorno_inizio = data.strftime("%Y%m%d")
-                  giorno_fine = (
-                      data + timedelta(days=1)
-                  ).strftime("%Y%m%d")
+                  titolo = f"{casa} - {trasferta}"
 
                   descrizione = (
-                      f"{casa} - {trasferta}\\n"
-                      f"Calendario Paganese Calcio 1926"
+                      f"{titolo}\\n"
+                      "Calendario Paganese Calcio 1926"
                   )
 
                   righe.extend([
                       "BEGIN:VEVENT",
                       f"UID:{escape_ics(uid)}",
-                      f"DTSTAMP:{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}",
-                      f"DTSTART;VALUE=DATE:{giorno_inizio}",
-                      f"DTEND;VALUE=DATE:{giorno_fine}",
-                      f"SUMMARY:{escape_ics(casa + ' - ' + trasferta)}",
+                      (
+                          "DTSTAMP:"
+                          f"{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}"
+                      ),
+                  ])
+
+                  if ha_orario:
+                      inizio = data_ora.strftime(
+                          "%Y%m%dT%H%M%S"
+                      )
+
+                      fine = (
+                          data_ora + timedelta(hours=2)
+                      ).strftime(
+                          "%Y%m%dT%H%M%S"
+                      )
+
+                      righe.extend([
+                          f"DTSTART;TZID=Europe/Rome:{inizio}",
+                          f"DTEND;TZID=Europe/Rome:{fine}",
+                      ])
+
+                      con_orario += 1
+
+                  else:
+                      giorno_inizio = data_ora.strftime(
+                          "%Y%m%d"
+                      )
+
+                      giorno_fine = (
+                          data_ora + timedelta(days=1)
+                      ).strftime(
+                          "%Y%m%d"
+                      )
+
+                      righe.extend([
+                          f"DTSTART;VALUE=DATE:{giorno_inizio}",
+                          f"DTEND;VALUE=DATE:{giorno_fine}",
+                      ])
+
+                      senza_orario += 1
+
+                  righe.extend([
+                      f"SUMMARY:{escape_ics(titolo)}",
                       f"DESCRIPTION:{escape_ics(descrizione)}",
                       "STATUS:CONFIRMED",
                       "TRANSP:TRANSPARENT",
@@ -375,9 +635,20 @@ jobs:
 
                   generati += 1
 
+                  print(
+                      f"ICS: {titolo} | "
+                      f"{testo_data_ora} | "
+                      f"Orario: {'SI' if ha_orario else 'NO'}"
+                  )
+
               righe.append("END:VCALENDAR")
 
-              return "\r\n".join(righe) + "\r\n", generati
+              return (
+                  "\r\n".join(righe) + "\r\n",
+                  generati,
+                  con_orario,
+                  senza_orario,
+              )
 
           tutte_le_partite = {}
 
@@ -438,7 +709,9 @@ jobs:
                           f"{errore}"
                       )
 
-          partite_uniche = list(tutte_le_partite.values())
+          partite_uniche = list(
+              tutte_le_partite.values()
+          )
 
           partite_paganese = [
               partita
@@ -448,7 +721,7 @@ jobs:
 
           partite_paganese.sort(
               key=lambda partita: (
-                  data_partita(partita),
+                  trova_data_ora(partita),
                   id_partita(partita),
               )
           )
@@ -473,9 +746,9 @@ jobs:
           ):
               print(
                   f"{indice:02d}. "
-                  f"{data_partita(partita)} | "
-                  f"{nome_squadra(partita, 'casa')} - "
-                  f"{nome_squadra(partita, 'trasferta')} | "
+                  f"{trova_data_ora(partita)} | "
+                  f"{nome_leggibile(nome_squadra(partita, 'casa'))} - "
+                  f"{nome_leggibile(nome_squadra(partita, 'trasferta'))} | "
                   f"ID: {id_partita(partita)} | "
                   f"Pagina: {partita.get('_leg')} "
                   f"{partita.get('_giornata_pagina')}"
@@ -499,7 +772,7 @@ jobs:
               encoding="utf-8",
           )
 
-          calendario_ics, eventi_generati = crea_ics(
+          calendario_ics, eventi_generati, con_orario, senza_orario = crea_ics(
               partite_paganese
           )
 
@@ -516,6 +789,12 @@ jobs:
           print(
               f"Eventi ICS generati: {eventi_generati}"
           )
+          print(
+              f"Eventi con orario: {con_orario}"
+          )
+          print(
+              f"Eventi senza orario: {senza_orario}"
+          )
 
           if len(partite_paganese) != 34:
               print("")
@@ -523,12 +802,14 @@ jobs:
                   "ATTENZIONE: il numero di partite Paganese "
                   f"è {len(partite_paganese)}, non 34."
               )
+
           elif eventi_generati != 34:
               print("")
               print(
                   "ATTENZIONE: sono state trovate 34 partite, "
                   f"ma generati soltanto {eventi_generati} eventi ICS."
               )
+
           else:
               print("")
               print(
@@ -548,8 +829,8 @@ jobs:
             paganese.ics
 
           echo ""
-          echo "Prime righe del calendario ICS:"
-          head -n 20 paganese.ics
+          echo "Eventi con DTSTART:"
+          grep -E "^DTSTART" paganese.ics || true
 
       - name: Commit dei risultati
         run: |
