@@ -1,196 +1,88 @@
-name: Studio dati pagina LND
+echo
+echo "========================================"
+echo "ANALISI COMPLETA JSON INCORPORATI"
+echo "========================================"
 
-on:
-  workflow_dispatch:
+python3 - <<'PY'
+import re
+import json
+from pathlib import Path
 
-permissions:
-  contents: read
+html = Path("pagina.html").read_text(encoding="utf-8", errors="ignore")
 
-jobs:
-  analisi-pagina:
-    runs-on: ubuntu-latest
+scripts = re.findall(
+    r'<script[^>]*type=["\']application/json["\'][^>]*>(.*?)</script>',
+    html,
+    flags=re.S | re.I
+)
 
-    steps:
-      - name: Scarica repository
-        uses: actions/checkout@v4
+print(f"Script JSON trovati: {len(scripts)}")
 
-      - name: Installa strumenti
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y curl python3
+def walk(value, path="root", depth=0):
+    if depth > 8:
+        return
 
-      - name: Scarica pagina ufficiale
-        run: |
-          set -e
+    if isinstance(value, dict):
+        for key, child in value.items():
+            key_path = f"{path}.{key}"
 
-          URL="https://gare.lnd.it/competizione/dipartimento-interregionale?campionato=ID&giornata=2&girone=G&leg=first&stagione=2026"
+            key_lower = str(key).lower()
 
-          echo "===================================="
-          echo "SCARICO PAGINA UFFICIALE LND"
-          echo "===================================="
+            if any(word in key_lower for word in [
+                "match",
+                "game",
+                "home",
+                "away",
+                "date",
+                "score",
+                "team",
+                "playday",
+                "calendar"
+            ]):
+                print(f"CHIAVE INTERESSANTE: {key_path}")
 
-          echo "URL:"
-          echo "$URL"
+                if isinstance(child, (dict, list)):
+                    try:
+                        preview = json.dumps(
+                            child,
+                            ensure_ascii=False,
+                            indent=2
+                        )
+                        print(preview[:3000])
+                    except Exception:
+                        print(repr(child)[:3000])
+                else:
+                    print(repr(child)[:1000])
 
-          curl -L -sS \
-            -A "Mozilla/5.0" \
-            "$URL" \
-            -o pagina.html
+            walk(child, key_path, depth + 1)
 
-          echo
-          echo "Dimensione pagina:"
-          wc -c pagina.html
+    elif isinstance(value, list):
+        for index, child in enumerate(value[:100]):
+            walk(child, f"{path}[{index}]", depth + 1)
 
-      - name: Cerca squadre e dati nel codice HTML
-        run: |
-          set -e
+for index, raw in enumerate(scripts, start=1):
+    print()
+    print("----------------------------------------")
+    print(f"SCRIPT JSON NUMERO {index}")
+    print("----------------------------------------")
 
-          echo
-          echo "===================================="
-          echo "RICERCA PAGANESE E SASSARI"
-          echo "===================================="
+    try:
+        data = json.loads(raw)
+    except Exception as exc:
+        print(f"JSON non valido: {exc}")
+        continue
 
-          echo
-          echo "--- OCCORRENZE PAGANESE ---"
-          grep -oi -C 8 "paganese" pagina.html | head -200 || true
+    if isinstance(data, dict):
+        print("Chiavi principali:")
+        for key in data.keys():
+            print(f" - {key}")
 
-          echo
-          echo "--- OCCORRENZE SASSARI ---"
-          grep -oi -C 8 "sassari" pagina.html | head -200 || true
+    print()
+    print("Ricerca ricorsiva delle chiavi interessanti:")
+    walk(data)
+PY
 
-          echo
-          echo "--- OCCORRENZE LATTE DOLCE ---"
-          grep -oi -C 8 "latte dolce" pagina.html | head -200 || true
-
-          echo
-          echo "--- OCCORRENZE MATCHES ---"
-          grep -oi -C 5 "matches" pagina.html | head -100 || true
-
-          echo
-          echo "--- OCCORRENZE MATCHDAY ---"
-          grep -oi -C 5 "matchday" pagina.html | head -100 || true
-
-      - name: Analizza script JSON incorporati
-        run: |
-          set -e
-
-          echo
-          echo "===================================="
-          echo "ANALISI SCRIPT JSON INCORPORATI"
-          echo "===================================="
-
-          python3 <<'PY'
-          import re
-          import html
-          import json
-
-          with open("pagina.html", "r", encoding="utf-8", errors="replace") as f:
-              pagina = f.read()
-
-          print("Numero caratteri HTML:", len(pagina))
-
-          # Cerca tutti i blocchi script presenti nella pagina
-          scripts = re.findall(
-              r"<script\b[^>]*>(.*?)</script>",
-              pagina,
-              flags=re.IGNORECASE | re.DOTALL
-          )
-
-          print("Script trovati:", len(scripts))
-
-          parole = [
-              "paganese",
-              "sassari",
-              "latte dolce",
-              "matchday",
-              "matches",
-              "home",
-              "away",
-              "startDate"
-          ]
-
-          trovati = 0
-
-          for indice, contenuto in enumerate(scripts, start=1):
-              testo = html.unescape(contenuto)
-              testo = testo.replace("\\/", "/")
-
-              presenti = [
-                  parola for parola in parole
-                  if parola.lower() in testo.lower()
-              ]
-
-              if not presenti:
-                  continue
-
-              trovati += 1
-
-              print()
-              print("------------------------------------")
-              print("SCRIPT NUMERO:", indice)
-              print("Parole trovate:", ", ".join(presenti))
-              print("Dimensione:", len(testo))
-
-              # Prova a interpretare il contenuto come JSON
-              try:
-                  dati = json.loads(testo)
-                  print("JSON valido: SI")
-                  print("Tipo principale:", type(dati).__name__)
-
-                  testo_json = json.dumps(
-                      dati,
-                      ensure_ascii=False,
-                      indent=2
-                  )
-
-                  righe = testo_json.splitlines()
-
-                  for numero_riga, riga in enumerate(righe, start=1):
-                      if any(
-                          parola.lower() in riga.lower()
-                          for parola in parole
-                      ):
-                          inizio = max(0, numero_riga - 4)
-                          fine = min(len(righe), numero_riga + 5)
-
-                          print()
-                          print(
-                              f"Contesto JSON righe "
-                              f"{inizio + 1}-{fine}:"
-                          )
-
-                          for r in righe[inizio:fine]:
-                              print(r)
-
-              except Exception as errore:
-                  print("JSON valido: NO")
-                  print("Motivo:", str(errore)[:200])
-
-                  # Mostra comunque il contesto testuale
-                  testo_lower = testo.lower()
-
-                  for parola in parole:
-                      posizione = testo_lower.find(parola.lower())
-
-                      if posizione == -1:
-                          continue
-
-                      inizio = max(0, posizione - 300)
-                      fine = min(len(testo), posizione + 700)
-
-                      print()
-                      print("Contesto per:", parola)
-                      print(testo[inizio:fine])
-
-          print()
-          print("====================================")
-          print("SCRIPT CON DATI INTERESSANTI:", trovati)
-          print("====================================")
-          PY
-
-      - name: Mostra fine analisi
-        run: |
-          echo
-          echo "===================================="
-          echo "FINE ANALISI"
-          echo "===================================="
+echo
+echo "========================================"
+echo "FINE ANALISI JSON"
+echo "========================================"
