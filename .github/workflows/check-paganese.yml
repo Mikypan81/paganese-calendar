@@ -17,96 +17,102 @@ jobs:
       - name: Installa strumenti
         run: |
           sudo apt-get update
-          sudo apt-get install -y curl jq
+          sudo apt-get install -y curl grep sed
 
-      - name: Test API calendario ufficiale LND
+      - name: Cerca autenticazione API LND
         shell: bash
         run: |
           set -e
 
           echo "===================================="
-          echo "TEST API CALENDARIO UFFICIALE LND"
+          echo "RICERCA AUTENTICAZIONE API LND"
           echo "===================================="
 
-          API_URL="https://gare.lnd.it/api/as400/calendario/21/ID/G/2026/2027"
+          PAGINA_URL="https://gare.lnd.it/competizione/dipartimento-interregionale?campionato=ID&giornata=2&girone=G&leg=first&stagione=2026"
+
+          JS_URL="https://gare.lnd.it/build/assets/app-93509732.js"
 
           echo ""
-          echo "API controllata:"
-          echo "$API_URL"
+          echo "Scarico il JavaScript ufficiale..."
 
-          echo ""
-          echo "Scarico i dati..."
-
-          HTTP_CODE=$(curl \
+          curl \
             -L \
+            --fail \
             --silent \
             --show-error \
             --compressed \
             -A "Mozilla/5.0" \
-            -w "%{http_code}" \
-            "$API_URL" \
-            -o calendario.json)
+            "$JS_URL" \
+            -o app.js
 
           echo ""
-          echo "Codice HTTP:"
-          echo "$HTTP_CODE"
-
-          echo ""
-          echo "Dimensione risposta:"
-          wc -c calendario.json
+          echo "Dimensione JavaScript:"
+          wc -c app.js
 
           echo ""
           echo "===================================="
-          echo "PRIMI 3000 CARATTERI DELLA RISPOSTA"
+          echo "RICERCA X-API-KEY"
           echo "===================================="
 
-          head -c 3000 calendario.json
-          echo ""
-
-          echo ""
-          echo "===================================="
-          echo "VERIFICA JSON"
-          echo "===================================="
-
-          if jq empty calendario.json 2>/dev/null; then
-            echo "La risposta è un JSON valido."
-          else
-            echo "La risposta NON è un JSON valido."
-          fi
-
-          echo ""
-          echo "===================================="
-          echo "STRUTTURA JSON"
-          echo "===================================="
-
-          jq 'type' calendario.json 2>/dev/null || true
-
-          echo ""
-          echo "===================================="
-          echo "CHIAVI PRINCIPALI"
-          echo "===================================="
-
-          jq 'keys' calendario.json 2>/dev/null || true
-
-          echo ""
-          echo "===================================="
-          echo "RICERCA PAGANESE"
-          echo "===================================="
-
-          grep -ioE '.{0,250}paganese.{0,500}' calendario.json \
-            | head -20 \
+          grep -oiE '.{0,250}x-api-key.{0,500}' app.js \
+            | head -30 \
             || true
 
           echo ""
           echo "===================================="
-          echo "RICERCA SASSARI"
+          echo "RICERCA API_KEY"
           echo "===================================="
 
-          grep -ioE '.{0,250}sassari.{0,500}' calendario.json \
-            | head -20 \
+          grep -oiE '.{0,250}api[_-]?key.{0,500}' app.js \
+            | head -30 \
             || true
 
           echo ""
           echo "===================================="
-          echo "FINE TEST"
+          echo "RICERCA APIKEY"
+          echo "===================================="
+
+          grep -oiE '.{0,250}apikey.{0,500}' app.js \
+            | head -30 \
+            || true
+
+          echo ""
+          echo "===================================="
+          echo "RICERCA AUTHORIZATION"
+          echo "===================================="
+
+          grep -oiE '.{0,250}authorization.{0,500}' app.js \
+            | head -30 \
+            || true
+
+          echo ""
+          echo "===================================="
+          echo "RICERCA ENDPOINT AS400"
+          echo "===================================="
+
+          grep -oiE '.{0,300}as400.{0,700}' app.js \
+            | head -30 \
+            || true
+
+          echo ""
+          echo "===================================="
+          echo "RICERCA ENDPOINT CALENDARIO"
+          echo "===================================="
+
+          grep -oiE '.{0,300}calendario.{0,700}' app.js \
+            | head -30 \
+            || true
+
+          echo ""
+          echo "===================================="
+          echo "RICERCA CONFIGURAZIONI"
+          echo "===================================="
+
+          grep -oiE '.{0,250}(config|token|secret|header|bearer).{0,500}' app.js \
+            | head -50 \
+            || true
+
+          echo ""
+          echo "===================================="
+          echo "FINE RICERCA"
           echo "===================================="
