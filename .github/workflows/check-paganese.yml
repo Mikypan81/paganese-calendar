@@ -1,4 +1,4 @@
-name: Studio dati pagina LND
+name: Studio calendario completo LND
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 jobs:
-  analisi-pagina:
+  analisi-calendario:
     runs-on: ubuntu-latest
 
     steps:
@@ -19,86 +19,45 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y curl python3
 
-      - name: Scarica pagina ufficiale
+      - name: Scarica tutte le giornate e trova la Paganese
         run: |
           set -e
-
-          URL="https://gare.lnd.it/competizione/dipartimento-interregionale?campionato=ID&giornata=2&girone=G&leg=first&stagione=2026"
-
-          echo "===================================="
-          echo "SCARICO PAGINA UFFICIALE LND"
-          echo "===================================="
-
-          echo "URL:"
-          echo "$URL"
-
-          curl -L -sS \
-            -A "Mozilla/5.0" \
-            "$URL" \
-            -o pagina.html
-
-          echo
-          echo "Dimensione pagina:"
-          wc -c pagina.html
-
-      - name: Cerca squadre e dati nel codice HTML
-        run: |
-          set -e
-
-          echo
-          echo "===================================="
-          echo "RICERCA PAGANESE E SASSARI"
-          echo "===================================="
-
-          echo
-          echo "--- OCCORRENZE PAGANESE ---"
-          grep -oi -C 8 "paganese" pagina.html | head -200 || true
-
-          echo
-          echo "--- OCCORRENZE SASSARI ---"
-          grep -oi -C 8 "sassari" pagina.html | head -200 || true
-
-          echo
-          echo "--- OCCORRENZE LATTE DOLCE ---"
-          grep -oi -C 8 "latte dolce" pagina.html | head -200 || true
-
-          echo
-          echo "--- OCCORRENZE MATCHES ---"
-          grep -oi -C 5 "matches" pagina.html | head -100 || true
-
-          echo
-          echo "--- OCCORRENZE MATCHDAY ---"
-          grep -oi -C 5 "matchday" pagina.html | head -100 || true
-
-      - name: Estrai e stampa tutte le partite
-        run: |
-          set -e
-
-          echo
-          echo "========================================"
-          echo "ESTRAZIONE DI TUTTE LE PARTITE"
-          echo "========================================"
 
           python3 - <<'PY'
           import html
           import json
           import re
+          import time
           from pathlib import Path
+          from urllib.request import Request, urlopen
 
-          pagina = Path("pagina.html").read_text(
-              encoding="utf-8",
-              errors="ignore"
+          BASE_URL = (
+              "https://gare.lnd.it/competizione/"
+              "dipartimento-interregionale"
+              "?campionato=ID"
+              "&giornata={giornata}"
+              "&girone=G"
+              "&leg=first"
+              "&stagione=2026"
           )
 
-          print(f"Numero caratteri HTML: {len(pagina)}")
+          NOME_PAGANESE = "paganese"
 
-          scripts = re.findall(
-              r"<script\b[^>]*>(.*?)</script>",
-              pagina,
-              flags=re.IGNORECASE | re.DOTALL
-          )
+          def scarica_pagina(url):
+              richiesta = Request(
+                  url,
+                  headers={
+                      "User-Agent": "Mozilla/5.0"
+                  }
+              )
 
-          print(f"Script trovati: {len(scripts)}")
+              with urlopen(richiesta, timeout=30) as risposta:
+                  contenuto = risposta.read()
+
+              return contenuto.decode(
+                  "utf-8",
+                  errors="ignore"
+              )
 
           def pulisci_testo(testo):
               testo = html.unescape(testo)
@@ -107,10 +66,28 @@ jobs:
               testo = testo.replace("\\u0027", "'")
               return testo
 
+          def estrai_json_da_script(testo):
+              testo = pulisci_testo(testo)
+              decoder = json.JSONDecoder()
+
+              for posizione, carattere in enumerate(testo):
+                  if carattere not in "{[":
+                      continue
+
+                  candidato = testo[posizione:].strip()
+
+                  try:
+                      oggetto, caratteri_letti = decoder.raw_decode(
+                          candidato
+                      )
+                      return oggetto
+
+                  except Exception:
+                      continue
+
+              return None
+
           def cerca_matches(valore, percorso="root", profondita=0):
-              """
-              Cerca ricorsivamente tutte le chiavi chiamate matches.
-              """
               risultati = []
 
               if profondita > 12:
@@ -145,140 +122,137 @@ jobs:
 
               return risultati
 
-          def estrai_json_da_script(testo):
-              """
-              Prova a estrarre un oggetto JSON completo
-              anche quando lo script contiene altro codice.
-              """
-              testo = pulisci_testo(testo)
+          def estrai_partite_da_html(pagina):
+              scripts = re.findall(
+                  r"<script\b[^>]*>(.*?)</script>",
+                  pagina,
+                  flags=re.IGNORECASE | re.DOTALL
+              )
 
-              decoder = json.JSONDecoder()
+              for contenuto_script in scripts:
+                  testo = pulisci_testo(contenuto_script)
 
-              posizioni = [
-                  posizione
-                  for posizione, carattere in enumerate(testo)
-                  if carattere in "{["
-              ]
+                  parole_interessanti = [
+                      "matches",
+                      "paganese",
+                      "sassari",
+                      "matchday",
+                      "calendar"
+                  ]
 
-              for posizione in posizioni:
-                  candidato = testo[posizione:].strip()
-
-                  try:
-                      oggetto, caratteri_letti = decoder.raw_decode(
-                          candidato
-                      )
-
-                      return oggetto
-
-                  except Exception:
+                  if not any(
+                      parola.lower() in testo.lower()
+                      for parola in parole_interessanti
+                  ):
                       continue
 
-              return None
+                  oggetto = estrai_json_da_script(testo)
 
-          json_trovati = []
+                  if oggetto is None:
+                      continue
 
-          for numero_script, contenuto_script in enumerate(
-              scripts,
-              start=1
-          ):
-              testo = pulisci_testo(contenuto_script)
+                  risultati_matches = cerca_matches(oggetto)
 
-              parole_interessanti = [
-                  "matches",
-                  "paganese",
-                  "sassari",
-                  "latte dolce",
-                  "matchday",
-                  "calendar"
-              ]
+                  for percorso, matches in risultati_matches:
+                      if percorso == "root.props.matches":
+                          if isinstance(matches, list):
+                              return matches
 
-              if not any(
-                  parola.lower() in testo.lower()
-                  for parola in parole_interessanti
-              ):
-                  continue
+              return []
+
+          tutte_le_partite = []
+          giornate_con_dati = 0
+
+          print("========================================")
+          print("SCARICO LE 34 GIORNATE DEL GIRONE G")
+          print("========================================")
+
+          for giornata in range(1, 35):
+              url = BASE_URL.format(giornata=giornata)
 
               print()
               print("----------------------------------------")
-              print(f"ANALIZZO SCRIPT NUMERO {numero_script}")
+              print(f"GIORNATA {giornata}")
               print("----------------------------------------")
+              print(url)
 
-              oggetto = estrai_json_da_script(testo)
+              try:
+                  pagina = scarica_pagina(url)
+                  partite = estrai_partite_da_html(pagina)
 
-              if oggetto is None:
-                  print("Nessun JSON estraibile in questo script.")
-                  continue
+                  print("Partite trovate:", len(partite))
 
-              json_trovati.append(oggetto)
+                  if partite:
+                      giornate_con_dati += 1
 
-              risultati_matches = cerca_matches(oggetto)
+                      for partita in partite:
+                          partita["giornata"] = giornata
+                          tutte_le_partite.append(partita)
 
-              if not risultati_matches:
-                  print("Nessuna chiave 'matches' trovata.")
-                  continue
+                  else:
+                      print("ATTENZIONE: nessuna partita trovata.")
 
-              for percorso, matches in risultati_matches:
-                  print()
-                  print("========================================")
-                  print("ARRAY PARTITE TROVATO")
-                  print("Percorso:", percorso)
-                  print("========================================")
+              except Exception as errore:
+                  print("ERRORE:", str(errore))
 
-                  if not isinstance(matches, list):
-                      print("Il valore trovato non è una lista.")
-                      print(repr(matches)[:5000])
-                      continue
-
-                  print("Numero partite:", len(matches))
-                  print()
-
-                  for indice, partita in enumerate(matches, start=1):
-                      print("----------------------------------------")
-                      print(f"PARTITA {indice}")
-                      print("----------------------------------------")
-
-                      if isinstance(partita, dict):
-                          data = partita.get("date")
-                          casa = partita.get("home")
-                          ospite = partita.get("away")
-                          gol_casa = partita.get("homeGoals")
-                          gol_ospite = partita.get("awayGoals")
-
-                          print("Data:", data)
-                          print("Casa:", casa)
-                          print("Ospite:", ospite)
-                          print("Gol casa:", gol_casa)
-                          print("Gol ospite:", gol_ospite)
-
-                          print()
-                          print("Dati completi della partita:")
-
-                          print(
-                              json.dumps(
-                                  partita,
-                                  ensure_ascii=False,
-                                  indent=2
-                              )
-                          )
-
-                      else:
-                          print(
-                              json.dumps(
-                                  partita,
-                                  ensure_ascii=False,
-                                  indent=2
-                              )
-                          )
+              time.sleep(1)
 
           print()
           print("========================================")
-          print("FINE ESTRAZIONE PARTITE")
+          print("RISULTATO COMPLESSIVO")
+          print("========================================")
+          print("Giornate con dati:", giornate_con_dati)
+          print("Partite totali raccolte:", len(tutte_le_partite))
+
+          partite_paganese = []
+
+          for partita in tutte_le_partite:
+              casa = str(partita.get("home", ""))
+              ospite = str(partita.get("away", ""))
+
+              if (
+                  NOME_PAGANESE in casa.lower()
+                  or NOME_PAGANESE in ospite.lower()
+              ):
+                  partite_paganese.append(partita)
+
+          partite_paganese.sort(
+              key=lambda partita: (
+                  partita.get("date") or "",
+                  partita.get("time") or "",
+                  partita.get("id") or 0
+              )
+          )
+
+          print()
+          print("========================================")
+          print("PARTITE DELLA PAGANESE")
+          print("========================================")
+          print("Numero partite Paganese:", len(partite_paganese))
+
+          for indice, partita in enumerate(
+              partite_paganese,
+              start=1
+          ):
+              print()
+              print("----------------------------------------")
+              print(f"PARTITA PAGANESE {indice}")
+              print("----------------------------------------")
+
+              print("ID:", partita.get("id"))
+              print("Giornata:", partita.get("giornata"))
+              print("Data:", partita.get("date"))
+              print("Ora:", partita.get("time"))
+              print("Casa:", partita.get("home"))
+              print("Ospite:", partita.get("away"))
+              print("Campo:", partita.get("field"))
+              print("Indirizzo:", partita.get("fieldAddress"))
+              print("Risultato:", partita.get("homeGoals"), "-", partita.get("awayGoals"))
+              print("Giocata:", partita.get("isPlayed"))
+              print("Riprogrammata:", partita.get("isRescheduled"))
+
+          print()
+          print("========================================")
+          print("FINE ANALISI")
           print("========================================")
           PY
-
-      - name: Mostra fine analisi
-        run: |
-          echo
-          echo "========================================"
-          echo "FINE ANALISI"
-          echo "========================================"
