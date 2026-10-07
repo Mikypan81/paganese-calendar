@@ -1548,7 +1548,7 @@
   {
     "id": 10343569,
     "date": "2026-10-11",
-    "time": "15:30:00",
+    "time": "15:00:00",
     "home": "ALBALONGA SSD A R.L.",
     "away": "CERTOSA A.R.L.",
     "homeGoals": 0,
@@ -1557,10 +1557,10 @@
       "originalDate": "2026-10-11",
       "originalTime": "15:00:00",
       "originalField": "COMUNALE",
-      "status": "RIC",
-      "description": "Richiesta variazione",
+      "status": "NUF",
+      "description": null,
       "originalAddress": "VIA SPAGNA 2, ALBANO LAZIALE (RM)",
-      "hasDiff": true
+      "hasDiff": false
     },
     "field": "COMUNALE",
     "outcome": "",
@@ -1572,7 +1572,7 @@
     "endedOnPenalties": false,
     "isLive": false,
     "fieldAddress": "VIA SPAGNA 2, ALBANO LAZIALE (RM)",
-    "variation": "open",
+    "variation": "rejected",
     "isInverted": false,
     "resultState": 0,
     "isPlayed": false,
