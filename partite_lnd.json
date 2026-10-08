@@ -171,12 +171,12 @@
     "awayGoals": 0,
     "change": {
       "originalDate": "2026-09-06",
-      "originalTime": "16:00:00",
+      "originalTime": "15:00:00",
       "originalField": "COMUNALE \"VALENTINO GIORDANO\"",
       "status": "UFF",
       "description": "Ufficializzata",
       "originalAddress": "VIA CAMPO SPORTIVO, CASTELNUOVO CILENTO (SA)",
-      "hasDiff": false
+      "hasDiff": true
     },
     "field": "COMUNALE \"VALENTINO GIORDANO\"",
     "outcome": "Da Giudice sportivo",
@@ -188,7 +188,7 @@
     "endedOnPenalties": false,
     "isLive": false,
     "fieldAddress": "VIA CAMPO SPORTIVO, CASTELNUOVO CILENTO (SA)",
-    "variation": "rejected",
+    "variation": "confirmed",
     "isInverted": false,
     "resultState": 4,
     "isPlayed": true,
@@ -348,13 +348,13 @@
     "homeGoals": 1,
     "awayGoals": 1,
     "change": {
-      "originalDate": "2026-09-12",
-      "originalTime": "16:00:00",
+      "originalDate": "2026-09-13",
+      "originalTime": "15:00:00",
       "originalField": "CAMPO \"L.MOCCIA\"",
       "status": "UFF",
       "description": "Ufficializzata",
       "originalAddress": "PROLUNGAMENTO V. CALVANESE, AFRAGOLA (NA)",
-      "hasDiff": false
+      "hasDiff": true
     },
     "field": "CAMPO \"L.MOCCIA\"",
     "outcome": "Da Giudice sportivo",
@@ -366,7 +366,7 @@
     "endedOnPenalties": false,
     "isLive": false,
     "fieldAddress": "PROLUNGAMENTO V. CALVANESE, AFRAGOLA (NA)",
-    "variation": "rejected",
+    "variation": "confirmed",
     "isInverted": false,
     "resultState": 4,
     "isPlayed": true,
@@ -410,13 +410,13 @@
     "homeGoals": 3,
     "awayGoals": 1,
     "change": {
-      "originalDate": "2026-09-12",
-      "originalTime": "16:30:00",
+      "originalDate": "2026-09-13",
+      "originalTime": "15:00:00",
       "originalField": "COMUNALE",
       "status": "UFF",
       "description": "Ufficializzata",
       "originalAddress": "VIA SPAGNA 2, ALBANO LAZIALE (RM)",
-      "hasDiff": false
+      "hasDiff": true
     },
     "field": "COMUNALE",
     "outcome": "Da Giudice sportivo",
@@ -428,7 +428,7 @@
     "endedOnPenalties": false,
     "isLive": false,
     "fieldAddress": "VIA SPAGNA 2, ALBANO LAZIALE (RM)",
-    "variation": "rejected",
+    "variation": "confirmed",
     "isInverted": false,
     "resultState": 4,
     "isPlayed": true,
@@ -527,12 +527,12 @@
     "awayGoals": 1,
     "change": {
       "originalDate": "2026-09-16",
-      "originalTime": "12:00:00",
+      "originalTime": "15:00:00",
       "originalField": "COMUNALE \"VALENTINO GIORDANO\"",
       "status": "UFF",
       "description": "Ufficializzata",
       "originalAddress": "VIA CAMPO SPORTIVO, CASTELNUOVO CILENTO (SA)",
-      "hasDiff": false
+      "hasDiff": true
     },
     "field": "COMUNALE \"VALENTINO GIORDANO\"",
     "outcome": "Da Giudice sportivo",
@@ -544,7 +544,7 @@
     "endedOnPenalties": false,
     "isLive": false,
     "fieldAddress": "VIA CAMPO SPORTIVO, CASTELNUOVO CILENTO (SA)",
-    "variation": "rejected",
+    "variation": "confirmed",
     "isInverted": false,
     "resultState": 4,
     "isPlayed": true,
@@ -994,12 +994,12 @@
     "awayGoals": 1,
     "change": {
       "originalDate": "2026-09-20",
-      "originalTime": "16:00:00",
+      "originalTime": "15:00:00",
       "originalField": "COMUNALE \"FELICE SQUITIERI\"",
       "status": "UFF",
       "description": "Ufficializzata",
       "originalAddress": "VIA CANNELLONE, SARNO (SA)",
-      "hasDiff": false
+      "hasDiff": true
     },
     "field": "COMUNALE \"FELICE SQUITIERI\"",
     "outcome": "Da Giudice sportivo",
@@ -1011,7 +1011,7 @@
     "endedOnPenalties": false,
     "isLive": false,
     "fieldAddress": "VIA CANNELLONE, SARNO (SA)",
-    "variation": "rejected",
+    "variation": "confirmed",
     "isInverted": false,
     "resultState": 4,
     "isPlayed": true,
@@ -1245,12 +1245,12 @@
     "awayGoals": 2,
     "change": {
       "originalDate": "2026-09-27",
-      "originalTime": "15:30:00",
+      "originalTime": "15:00:00",
       "originalField": "CAMPO COMUNALE DI MONASTIR",
       "status": "UFF",
       "description": "Ufficializzata",
       "originalAddress": "VIA GRAZIA DELEDDA 5, MONASTIR (CA)",
-      "hasDiff": false
+      "hasDiff": true
     },
     "field": "CAMPO COMUNALE DI MONASTIR",
     "outcome": "Da Giudice sportivo",
@@ -1262,7 +1262,7 @@
     "endedOnPenalties": false,
     "isLive": false,
     "fieldAddress": "VIA GRAZIA DELEDDA 5, MONASTIR (CA)",
-    "variation": "rejected",
+    "variation": "confirmed",
     "isInverted": false,
     "resultState": 4,
     "isPlayed": true,
@@ -1280,12 +1280,12 @@
     "awayGoals": 2,
     "change": {
       "originalDate": "2026-10-04",
-      "originalTime": "14:00:00",
+      "originalTime": "15:00:00",
       "originalField": "CAMPO \"L.MOCCIA\"",
       "status": "UFF",
       "description": "Ufficializzata",
       "originalAddress": "PROLUNGAMENTO V. CALVANESE, AFRAGOLA (NA)",
-      "hasDiff": false
+      "hasDiff": true
     },
     "field": "CAMPO \"L.MOCCIA\"",
     "outcome": "Da Giudice sportivo",
@@ -1297,7 +1297,7 @@
     "endedOnPenalties": false,
     "isLive": false,
     "fieldAddress": "PROLUNGAMENTO V. CALVANESE, AFRAGOLA (NA)",
-    "variation": "rejected",
+    "variation": "confirmed",
     "isInverted": false,
     "resultState": 4,
     "isPlayed": true,
@@ -1450,12 +1450,12 @@
     "awayGoals": 1,
     "change": {
       "originalDate": "2026-10-04",
-      "originalTime": "15:30:00",
+      "originalTime": "15:00:00",
       "originalField": "COMUNALE \"FELICE SQUITIERI\"",
       "status": "UFF",
       "description": "Ufficializzata",
       "originalAddress": "VIA CANNELLONE, SARNO (SA)",
-      "hasDiff": false
+      "hasDiff": true
     },
     "field": "COMUNALE \"FELICE SQUITIERI\"",
     "outcome": "Da Giudice sportivo",
@@ -1467,7 +1467,7 @@
     "endedOnPenalties": false,
     "isLive": false,
     "fieldAddress": "VIA CANNELLONE, SARNO (SA)",
-    "variation": "rejected",
+    "variation": "confirmed",
     "isInverted": false,
     "resultState": 4,
     "isPlayed": true,
@@ -1485,12 +1485,12 @@
     "awayGoals": 2,
     "change": {
       "originalDate": "2026-10-04",
-      "originalTime": "15:30:00",
+      "originalTime": "15:00:00",
       "originalField": "COMUNALE",
       "status": "UFF",
       "description": "Ufficializzata",
       "originalAddress": "VIA SPAGNA 2, ALBANO LAZIALE (RM)",
-      "hasDiff": false
+      "hasDiff": true
     },
     "field": "COMUNALE",
     "outcome": "Da Giudice sportivo",
@@ -1502,7 +1502,7 @@
     "endedOnPenalties": false,
     "isLive": false,
     "fieldAddress": "VIA SPAGNA 2, ALBANO LAZIALE (RM)",
-    "variation": "rejected",
+    "variation": "confirmed",
     "isInverted": false,
     "resultState": 4,
     "isPlayed": true,
@@ -1520,12 +1520,12 @@
     "awayGoals": 5,
     "change": {
       "originalDate": "2026-10-04",
-      "originalTime": "16:00:00",
+      "originalTime": "15:00:00",
       "originalField": "COMUNALE \"P. PINNA\"",
       "status": "UFF",
       "description": "Ufficializzata",
       "originalAddress": "S.S. 125 LUCURRAI - ZONA CUPRA, BUDONI (SS)",
-      "hasDiff": false
+      "hasDiff": true
     },
     "field": "COMUNALE \"P. PINNA\"",
     "outcome": "Da Giudice sportivo",
@@ -1537,7 +1537,7 @@
     "endedOnPenalties": false,
     "isLive": false,
     "fieldAddress": "S.S. 125 LUCURRAI - ZONA CUPRA, BUDONI (SS)",
-    "variation": "rejected",
+    "variation": "confirmed",
     "isInverted": false,
     "resultState": 4,
     "isPlayed": true,

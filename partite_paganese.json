@@ -144,12 +144,12 @@
     "awayGoals": 1,
     "change": {
       "originalDate": "2026-10-04",
-      "originalTime": "15:30:00",
+      "originalTime": "15:00:00",
       "originalField": "COMUNALE \"FELICE SQUITIERI\"",
       "status": "UFF",
       "description": "Ufficializzata",
       "originalAddress": "VIA CANNELLONE, SARNO (SA)",
-      "hasDiff": false
+      "hasDiff": true
     },
     "field": "COMUNALE \"FELICE SQUITIERI\"",
     "outcome": "Da Giudice sportivo",
@@ -161,7 +161,7 @@
     "endedOnPenalties": false,
     "isLive": false,
     "fieldAddress": "VIA CANNELLONE, SARNO (SA)",
-    "variation": "rejected",
+    "variation": "confirmed",
     "isInverted": false,
     "resultState": 4,
     "isPlayed": true,
