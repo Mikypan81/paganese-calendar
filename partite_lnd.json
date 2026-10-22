@@ -1558,7 +1558,7 @@
       "originalTime": "15:00:00",
       "originalField": "COMUNALE",
       "status": "NUF",
-      "description": null,
+      "description": "Non ufficializzata",
       "originalAddress": "VIA SPAGNA 2, ALBANO LAZIALE (RM)",
       "hasDiff": false
     },
@@ -1971,7 +1971,7 @@
       "originalTime": "15:00:00",
       "originalField": "COMUNALE \"LATTE DOLCE\"",
       "status": "NUF",
-      "description": null,
+      "description": "Non ufficializzata",
       "originalAddress": "RIONE LATTE DOLCE, SASSARI (SS)",
       "hasDiff": false
     },
