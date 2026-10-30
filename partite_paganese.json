@@ -297,8 +297,8 @@
       "originalDate": "2026-11-08",
       "originalTime": "14:30:00",
       "originalField": "COMUNALE CIRCILLAI",
-      "status": "RIC",
-      "description": "Richiesta variazione",
+      "status": "ACC",
+      "description": "Richiesta accettata",
       "originalAddress": "VIA LEONARDO 14, BARI SARDO (OG)",
       "hasDiff": true
     },
