@@ -291,7 +291,7 @@
     "time": "14:00:00",
     "home": "C.O.S. SARRABUS OGLIASTRA",
     "away": "PAGANESE CALCIO 1926",
-    "homeGoals": 0,
+    "homeGoals": 2,
     "awayGoals": 0,
     "change": {
       "originalDate": "2026-11-08",
@@ -303,7 +303,7 @@
       "hasDiff": true
     },
     "field": "COMUNALE CIRCILLAI",
-    "outcome": "",
+    "outcome": "Da Giudice sportivo",
     "isRescheduled": false,
     "liveUrl": null,
     "winner": null,
@@ -314,8 +314,8 @@
     "fieldAddress": "VIA LEONARDO 14, BARI SARDO (OG)",
     "variation": "confirmed",
     "isInverted": false,
-    "resultState": 0,
-    "isPlayed": false,
+    "resultState": 4,
+    "isPlayed": true,
     "isRest": false,
     "_leg": "andata",
     "_giornata_pagina": 11
@@ -913,32 +913,5 @@
     "isRest": false,
     "_leg": "ritorno",
     "_giornata_pagina": 16
-  },
-  {
-    "id": 10343816,
-    "date": "2027-05-02",
-    "time": "15:00:00",
-    "home": "PAGANESE CALCIO 1926",
-    "away": "ALBALONGA SSD A R.L.",
-    "homeGoals": 0,
-    "awayGoals": 0,
-    "change": null,
-    "field": "COMUNALE \"MARCELLO TORRE\"",
-    "outcome": "",
-    "isRescheduled": false,
-    "liveUrl": null,
-    "winner": null,
-    "homeLogo": "https://play.lnd.it/lndimg/71942/71942-web.jpg",
-    "awayLogo": "https://play.lnd.it/lndimg/81776/81776-web.png",
-    "endedOnPenalties": false,
-    "isLive": false,
-    "fieldAddress": "VIA CESARE SPORTELLI, PAGANI (SA)",
-    "variation": null,
-    "isInverted": false,
-    "resultState": 0,
-    "isPlayed": false,
-    "isRest": false,
-    "_leg": "ritorno",
-    "_giornata_pagina": 17
   }
 ]
